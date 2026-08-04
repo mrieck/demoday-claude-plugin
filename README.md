@@ -92,7 +92,7 @@ anything's missing, Claude tells you the exact Settings pane during preflight.
 Same Keychain one-liner, different account name:
 
 - **`ELEVENLABS_API_KEY`** — unlocks custom character voices via
-  [ElevenLabs Voice Design](https://elevenlabs.io/pricing)<!-- TODO(Mark): swap in affiliate URL -->.
+  [ElevenLabs Voice Design](https://try.elevenlabs.io/zecjglkbwy6x).
   Needs a paid ElevenLabs plan (Starter and up): the free tier blocks voice
   creation over the API, and a paid plan also carries the commercial license
   you'd want for a published video anyway.
