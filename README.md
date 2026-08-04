@@ -1,9 +1,3 @@
-
-
-https://github.com/user-attachments/assets/c5574440-bc0b-45fb-80d5-5333db1d0956
-
-
-
 ![DemoDay — Lights, camera, Claude.](docs/demoday_banner.png)
 
 # DemoDay
