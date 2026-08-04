@@ -1,3 +1,9 @@
+
+
+https://github.com/user-attachments/assets/c5574440-bc0b-45fb-80d5-5333db1d0956
+
+
+
 ![DemoDay — Lights, camera, Claude.](docs/demoday_banner.png)
 
 # DemoDay
@@ -16,13 +22,10 @@ on-camera presenter. One command, about the cost of a coffee.
 
 ## 🎬 See it in action
 
-<!-- TODO(Mark): embed the sample videos here. Edit README.md on github.com and
-     drag each .mp4 into the editor — GitHub uploads it and inserts a
-     user-attachments URL that renders as an inline player. Committed .mp4 files
-     do NOT get a player, so the drag-drop upload is the way. -->
+https://github.com/user-attachments/assets/18bf039d-789f-4685-91fe-96c1b051cb4d
 
-*Sample videos coming right after launch — the first one was filmed, narrated and
-edited entirely by DemoDay, including the sea-captain voiceover.*
+*Sample demo video of Overboard, another Claude Plugin (project dashboard), narrated and
+edited entirely by DemoDay, including the sea-captain voiceover using ElevanLabs.*
 
 ## ✨ What you get
 
