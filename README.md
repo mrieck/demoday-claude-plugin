@@ -123,3 +123,7 @@ Rendering uses Remotion, which is free for individuals and small companies but
 needs a paid license above a headcount threshold — see
 [remotion.dev/license](https://remotion.dev/license). Voices generated on a paid
 ElevenLabs plan include commercial usage rights.
+
+To subscribe to an ElevenLabs plan that allows commercial use, [click here](https://try.elevenlabs.io/zecjglkbwy6x).
+
+DemoDay itself is [MIT licensed](LICENSE).
