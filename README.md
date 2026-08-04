@@ -1,191 +1,125 @@
-# DemoDay Claude Plugin
+![DemoDay — Lights, camera, Claude.](docs/demoday_banner.png)
 
-Turns a codebase into a finished demo video. Claude reads your repo to learn what the
-software does, agrees a plan with you, **drives the app on screen** while telling you
-what it's exercising, generates the voiceover and an optional on-camera presenter via
-fal.ai, and renders the whole timeline — intro, transitions, captions, callouts — into
-one MP4 with Remotion.
+# DemoDay
+
+**Your software deserves a launch video. Let Claude film it.**
+
+DemoDay is a [Claude Code](https://claude.com/claude-code) plugin that turns any
+codebase into a finished, narrated demo video. Claude reads your repo, writes the
+script with you, **drives your app on screen**, narrates it with an AI voiceover —
+and hands you a polished MP4 with intro, captions, transitions and an optional
+on-camera presenter. One command, about the cost of a coffee.
 
 ```
 /demoday:create-demo-video
 ```
 
-macOS only. Capture works against web apps (Playwright), native desktop apps
-(real screen recording plus synthetic input), and CLI/terminal programs — a
-staged Terminal.app window running the real program (including a live `claude`
-session for demoing Claude Code plugins), recorded at natural speed and retimed
-to the narration. The iOS simulator target is declared in the manifest schema
-but not implemented yet.
+## 🎬 See it in action
 
----
+<!-- TODO(Mark): embed the sample videos here. Edit README.md on github.com and
+     drag each .mp4 into the editor — GitHub uploads it and inserts a
+     user-attachments URL that renders as an inline player. Committed .mp4 files
+     do NOT get a player, so the drag-drop upload is the way. -->
 
-## Setup
+*Sample videos coming right after launch — the first one was filmed, narrated and
+edited entirely by DemoDay, including the sea-captain voiceover.*
 
-### 1. Your fal.ai API key
+## ✨ What you get
 
-Everything generated — voice, presenter, b-roll — goes through [fal.ai](https://fal.ai/dashboard/keys),
-so a key is required. **Recommended: put it in the macOS Keychain.**
+- 🖱️ **Claude drives your app** — it rehearses off camera first, then a
+  deterministic runner performs the take with smooth cursor moves and human
+  typing. No dead air, no fumbling.
+- 🎙️ **AI voiceover with word-timed captions** — narration is generated first,
+  so every scene lands exactly on the voice.
+- 🧑‍💼 **Optional on-camera presenter** — an AI presenter for the intro, outro
+  and cutaways, lip-synced to the same voice as the narration.
+- 🗣️ **Custom character voices** — describe a voice in plain English
+  (*"weathered lobster-boat captain, thick coastal accent"*) and the whole demo
+  is narrated in it.
+- 🎞️ **Real editing, not a screencast** — title cards, transitions,
+  zoom-to-click, callouts, b-roll and audio ducking, rendered with
+  [Remotion](https://remotion.dev).
+- 💻 **Films almost anything on a Mac** — web apps, native macOS apps, and
+  CLI/terminal programs (yes, it can demo a Claude Code plugin from inside a
+  live `claude` session).
+- 🔁 **Cheap to iterate** — change one line of narration and only that line is
+  regenerated. A cost estimate is shown *before* anything is spent.
 
-Run this **in your own terminal**, not through Claude:
+## 🚀 Install
+
+In Claude Code:
+
+```
+/plugin marketplace add mrieck/claude-plugins
+/plugin install demoday@productive-mark
+```
+
+That's it for software — no `npm install`, no manual dependency setup. The first
+time you run `/demoday:create-demo-video`, Claude checks your machine and
+installs anything missing (Node packages, a capture browser, ffmpeg) before
+filming starts.
+
+> **Requirements:** macOS and [Claude Code](https://claude.com/claude-code). The
+> only thing Claude can't do for you is the two steps below.
+
+### 1. Add your fal.ai key (required)
+
+All generation — voice, presenter, b-roll — runs through
+[fal.ai](https://fal.ai/dashboard/keys). Store the key in your macOS Keychain by
+running this **in your own terminal** (not through Claude, so the key never
+touches a transcript):
 
 ```bash
 security add-generic-password -s demoday -a FAL_API_KEY -w
 ```
 
-`-w` with no value makes `security` prompt for the key without echoing it. Nothing
-is written in plaintext, nothing lands in your shell history, and — because you ran
-it yourself rather than asking Claude to — the key never enters a session transcript
-or gets sent to a model.
+It prompts for the key without echoing it. A typical 30-second demo costs
+**$1–2 in fal credits**.
 
-Optionally, the same way, for b-roll reference image search:
+Not on Keychain terms? Every other place a key can live is covered in
+[HOW_IT_WORKS.md](HOW_IT_WORKS.md#where-api-keys-can-live).
 
-```bash
-security add-generic-password -s demoday -a BRAVE_API_KEY -w
-```
+### 2. Grant screen permissions (desktop capture only)
 
-And optionally, for **custom character voices** — describe a voice in prose
-("weathered New England lobster-boat captain, thick coastal accent") and the
-whole demo is narrated in it. Uses [ElevenLabs Voice Design](https://elevenlabs.io/app/settings/api-keys)
-directly, so it needs its own key:
+To film a **native Mac app**, give the terminal you run Claude Code from
+(Terminal, iTerm, VS Code…) **Screen Recording** and **Accessibility** in System
+Settings → Privacy & Security, then restart the terminal. Filming web apps and
+CLI demos in a staged terminal window needs no permissions at all — and if
+anything's missing, Claude tells you the exact Settings pane during preflight.
 
-```bash
-security add-generic-password -s demoday -a ELEVENLABS_API_KEY -w
-```
+### Optional keys
 
-**This needs a paid ElevenLabs plan** (Starter and up) — the free tier cannot
-create or use voices through the API, only in the web app. A paid plan also
-carries the commercial license you need anyway to publish a demo video.
+Same Keychain one-liner, different account name:
 
-Designed voices are saved to your ElevenLabs account, where custom-voice slots
-are limited by subscription tier. The plugin reuses a voice when you give the
-same description twice, and `node scripts/gen/voice-design.mjs --list` /
-`--delete <voice_id>` shows and frees slots.
+- **`ELEVENLABS_API_KEY`** — unlocks custom character voices via
+  [ElevenLabs Voice Design](https://elevenlabs.io/pricing)<!-- TODO(Mark): swap in affiliate URL -->.
+  Needs a paid ElevenLabs plan (Starter and up): the free tier blocks voice
+  creation over the API, and a paid plan also carries the commercial license
+  you'd want for a published video anyway.
+- **`BRAVE_API_KEY`** — lets b-roll generation search reference images.
 
-Confirm it took:
+## 🎥 Make your first video
 
-```bash
-node scripts/doctor.mjs
-#   OK    FAL_API_KEY   set (from keychain)
-```
-
-macOS may ask for permission the first time a script reads the item. Choose
-**Always Allow** and you won't see it again.
-
-#### Other places the key can live
-
-Resolved in this order; the first hit wins.
-
-| # | Source | Survives a plugin update? |
-| :-: | --- | --- |
-| 1 | `FAL_API_KEY` in the environment | yes |
-| 2 | macOS Keychain (above) | yes |
-| 3 | `~/.config/demoday/config.json` | yes |
-| 4 | `.env` beside this README | **no** |
-
-Source 1 also covers an `env` block in `~/.claude/settings.json`, which is the
-portable option if you're not on macOS or don't want to use the Keychain:
-
-```json
-{
-  "env": {
-    "FAL_API_KEY": "your-key-here"
-  }
-}
-```
-
-Source 3 is the same idea as a dotfile, just outside the plugin:
-
-```json
-{ "FAL_API_KEY": "your-key-here", "BRAVE_API_KEY": "", "ELEVENLABS_API_KEY": "" }
-```
-
-**Source 4 is for developing this plugin, not for using it.** An installed plugin
-lives in a version-pinned directory:
+From the repo of the software you want to show off:
 
 ```
-~/.claude/plugins/cache/<marketplace>/demoday/0.1.0/
+/demoday:create-demo-video
 ```
 
-Publishing `0.2.0` creates a *new* directory beside it, so a `.env` you wrote into
-the old tree is orphaned and your key appears to vanish. `doctor.mjs` prints which
-source a key came from and flags this case specifically, rather than showing a green
-row that will break on the next update.
+Claude will read the codebase, pitch you two or three flows worth filming, ask
+about goal, audience, length and presenter style, and show you the cost estimate.
+Only after you say yes does it generate a single frame. Ten-ish minutes later
+there's an MP4 in `demo/`.
 
-Nothing in this plugin ever *writes* a secret — scripts only read. Writing would mean
-the key travelling through a tool call and into the transcript, which is exactly what
-the Keychain command above avoids.
+## 🔍 Under the hood
 
-### 2. Everything else
+The interesting bits — the two-pass rehearse/perform design, narration-first
+pacing, the `demo.json` manifest, content-addressed caching, and everything about
+API-key resolution — live in [HOW_IT_WORKS.md](HOW_IT_WORKS.md).
 
-```bash
-npm install
-npx playwright install chromium
-brew install ffmpeg cliclick
-node scripts/doctor.mjs          # every required row should say OK
-```
+## 📄 License notes
 
-`doctor.mjs` is the single source of truth for whether the machine is ready. Run it
-with `--target web` or `--target mac` to check only what one capture backend needs.
-
-### 3. macOS permissions (desktop capture only)
-
-Recording a native app needs two permissions granted to **the terminal app you run
-Claude Code from** (iTerm, Terminal, VS Code — whichever it is):
-
-- **Screen Recording** — System Settings → Privacy & Security → Screen Recording
-- **Accessibility** — System Settings → Privacy & Security → Accessibility
-
-Quit and reopen the terminal afterwards; macOS only re-reads these at launch.
-`node scripts/doctor.mjs --target mac` probes both and prints the exact path if
-either is missing. Web capture needs neither.
-
----
-
-## How it works
-
-The central idea is **two passes**, because recording a model while it explores an app
-produces jerky footage full of dead air.
-
-1. **Rehearsal** — Claude drives the app through the MCP server (screenshot → decide →
-   act → screenshot), working out what actually works. Nothing is recorded. The output
-   is an action script with verified selectors and coordinates.
-2. **Performance** — a deterministic runner replays that script with eased cursor
-   motion and human typing cadence, *while* recording. No model in the loop, so the
-   footage is smooth and repeatable.
-
-Narration is generated **first**, from one voice, so every scene's duration is known
-before anything is captured. The performance runner is then paced to land on the
-voiceover, and the on-camera presenter is animated to that same audio — so the
-narrator and the person on screen are audibly the same. `scripts/lib/pacing.mjs` owns
-the timing invariant that keeps one line from starting underneath the last one.
-
-## Layout
-
-```
-mcp/server.mjs        stateful rehearsal session (browser + screen)
-scripts/
-  doctor.mjs          environment preflight
-  selftest.mjs        full render from ffmpeg test patterns — zero API spend
-  lib/                manifest, cache, pacing, fal, ffmpeg, macOS helpers
-  capture/            web + macOS backends, deterministic replay
-  gen/                tts, presenter, b-roll
-  render/             props builder, Remotion driver
-remotion-template/    copied into your project on first render
-skills/               orchestration, capture, script and assembly craft
-```
-
-A project's state lives in `demo.json` — the timeline, artifact paths and durations.
-Every script reads and writes it, so a run can be resumed or partially regenerated.
-Generated artifacts are content-addressed in `.cache.json`, so changing one line of
-narration re-synthesises that line and nothing else.
-
-## Cost
-
-Roughly **$1–2 in fal credits** for a 30-second demo, dominated by presenter video
-generation. `node scripts/plan.mjs` prices a timeline before anything is spent, and
-`scripts/selftest.mjs` exercises the entire render path for free.
-
-## Licence note
-
-Remotion is free for individuals and small companies but requires a paid company
-licence above a headcount threshold. See [remotion.dev/license](https://remotion.dev/license).
+Rendering uses Remotion, which is free for individuals and small companies but
+needs a paid license above a headcount threshold — see
+[remotion.dev/license](https://remotion.dev/license). Voices generated on a paid
+ElevenLabs plan include commercial usage rights.
