@@ -1,0 +1,20 @@
+{
+  "name": "demoday",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Tools for Claude to record, narrate, and assemble software demo videos.",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "doctor": "node scripts/doctor.mjs"
+  },
+  "dependencies": {
+    "@fal-ai/client": "^1.10.1",
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "playwright": "^1.62.0",
+    "sharp": "^0.35.3",
+    "zod": "^3.25.0"
+  }
+}

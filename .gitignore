@@ -1,0 +1,12 @@
+# Secrets — never commit; use macOS Keychain or .env locally
+.env
+
+# Dependencies
+node_modules/
+
+# macOS
+.DS_Store
+
+# Build / render output
+remotion-template/out/
+*.mp4

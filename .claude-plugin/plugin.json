@@ -1,0 +1,8 @@
+{
+  "name": "demoday",
+  "version": "0.1.0",
+  "description": "Turn a codebase into a finished demo video: Claude drives the app on screen, narrates what it exercises, generates voiceover and an on-camera presenter via fal.ai, and renders the timeline with Remotion.",
+  "author": {
+    "name": "Mark Rieck"
+  }
+}
