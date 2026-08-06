@@ -105,7 +105,7 @@ async function apiError(pathname, res) {
     message =
       `ElevenLabs ${res.status}: ${apiMessage}\n` +
       "  Character voices need a paid ElevenLabs plan (Starter or above) — the free tier\n" +
-      "  cannot create or use voices through the API: https://try.elevenlabs.io/zecjglkbwy6x";
+      "  cannot create or use voices through the API: https://elevenlabs.io/pricing";
   } else if (apiStatus === "voice_limit_reached") {
     message =
       "ElevenLabs voice slots are full — your plan's custom-voice quota is used up.\n" +

@@ -1,3 +1,5 @@
+<a name="top"></a>
+
 ![DemoDay — Lights, camera, Claude.](docs/demoday_banner.png)
 
 # DemoDay
@@ -8,7 +10,7 @@ DemoDay is a [Claude Code](https://claude.com/claude-code) plugin that turns any
 codebase into a finished, narrated demo video. Claude reads your repo, writes the
 script with you, **drives your app on screen**, narrates it with an AI voiceover —
 and hands you a polished MP4 with intro, captions, transitions and an optional
-on-camera presenter. One command, about the cost of a coffee.
+on-camera presenter. One command, about the cost of a coffee. macOS only.
 
 ```
 /demoday:create-demo-video
@@ -19,7 +21,7 @@ on-camera presenter. One command, about the cost of a coffee.
 https://github.com/user-attachments/assets/18bf039d-789f-4685-91fe-96c1b051cb4d
 
 *Sample demo video of Overboard, another Claude Plugin (project dashboard), narrated and
-edited entirely by DemoDay, including the sea-captain voiceover using ElevanLabs.*
+edited entirely by DemoDay, including the sea-captain voiceover using ElevenLabs.*
 
 ## ✨ What you get
 
@@ -50,6 +52,10 @@ In Claude Code:
 /plugin marketplace add mrieck/claude-plugins
 /plugin install demoday@productive-mark
 ```
+
+(`productive-mark` is the marketplace, hosted in
+[mrieck/claude-plugins](https://github.com/mrieck/claude-plugins); `demoday` is
+the plugin — this repo.)
 
 That's it for software — no `npm install`, no manual dependency setup. The first
 time you run `/demoday:create-demo-video`, Claude checks your machine and
@@ -89,11 +95,20 @@ anything's missing, Claude tells you the exact Settings pane during preflight.
 Same Keychain one-liner, different account name:
 
 - **`ELEVENLABS_API_KEY`** — unlocks custom character voices via
-  [ElevenLabs Voice Design](https://try.elevenlabs.io/zecjglkbwy6x).
-  Needs a paid ElevenLabs plan (Starter and up): the free tier blocks voice
+  [ElevenLabs Voice Design](https://try.elevenlabs.io/zecjglkbwy6x)
+  *(affiliate link)*. Needs a paid ElevenLabs plan (Starter and up): the free tier blocks voice
   creation over the API, and a paid plan also carries the commercial license
   you'd want for a published video anyway.
 - **`BRAVE_API_KEY`** — lets b-roll generation search reference images.
+
+## 🔒 What leaves your machine
+
+Screen recordings, rehearsal screenshots and the finished MP4 stay local. Only
+what generation needs is uploaded: narration text, narration audio, the
+presenter image and b-roll frames go to [fal.ai](https://fal.ai) — and
+narration text to [ElevenLabs](https://elevenlabs.io) if you use it. API keys
+are only ever read, never written
+([details](HOW_IT_WORKS.md#where-api-keys-can-live)).
 
 ## 🎥 Make your first video
 
@@ -121,6 +136,7 @@ needs a paid license above a headcount threshold — see
 [remotion.dev/license](https://remotion.dev/license). Voices generated on a paid
 ElevenLabs plan include commercial usage rights.
 
-To subscribe to an ElevenLabs plan that allows commercial use, [click here](https://try.elevenlabs.io/zecjglkbwy6x).
+To subscribe to an ElevenLabs plan that allows commercial use,
+[click here](https://try.elevenlabs.io/zecjglkbwy6x) *(affiliate link)*.
 
 DemoDay itself is [MIT licensed](LICENSE).

@@ -122,6 +122,19 @@ Nothing in this plugin ever *writes* a secret — scripts only read. Writing wou
 mean the key travelling through a tool call and into the transcript, which is
 exactly what the Keychain flow avoids.
 
+## What leaves the machine
+
+The short version is in the README's
+[What leaves your machine](README.md#-what-leaves-your-machine) section. In
+pipeline terms: capture and rendering are entirely local (the `demo-stage` MCP
+server makes no network calls), and only generation steps upload anything.
+`scripts/lib/fal.mjs` uploads referenced local files (presenter image,
+narration audio, b-roll and still-iteration frames) to fal storage —
+content-addressed and cached by sha256 so the same file is never uploaded
+twice — and narration text goes to the configured TTS provider (fal, or
+api.elevenlabs.io directly). `scripts/qa.mjs` scans narration, typed text and
+visible URLs for anything credential-shaped before you publish.
+
 ## ElevenLabs voice management
 
 Custom character voices use ElevenLabs Voice Design, which requires a paid plan
