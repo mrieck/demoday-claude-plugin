@@ -1,0 +1,160 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  * { margin: 0; padding: 0; }
+  body { width: 1280px; height: 640px; overflow: hidden; }
+  .banner {
+    position: relative;
+    width: 1280px; height: 640px;
+    background:
+      radial-gradient(560px 460px at 6% 110%, #d9f3e7 0%, rgba(217,243,231,0) 70%),
+      radial-gradient(620px 500px at 96% -12%, #ffe9c9 0%, rgba(255,233,201,0) 72%),
+      radial-gradient(480px 420px at 80% 112%, #e6defb 0%, rgba(230,222,251,0) 70%),
+      linear-gradient(135deg, #fff8f0 0%, #ffeef2 55%, #fdeaf4 100%);
+    font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+  }
+  svg.art { position: absolute; inset: 0; }
+  .word {
+    position: absolute; left: 560px; top: 208px;
+    font-size: 108px; font-weight: 800; letter-spacing: -2px;
+    color: #46335a;
+  }
+  .word .accent { color: #f2708f; }
+  .tag {
+    position: absolute; left: 566px; top: 348px;
+    font-size: 36px; font-style: italic; font-weight: 500;
+    color: #8d7ba0;
+  }
+  .rule {
+    position: absolute; left: 568px; top: 414px;
+    width: 120px; height: 7px; border-radius: 4px;
+    background: #f2708f;
+  }
+</style>
+</head>
+<body>
+<div class="banner">
+
+<svg class="art" width="1280" height="640" viewBox="0 0 1280 640">
+
+  <!-- ===== pastel sun, top right ===== -->
+  <g transform="translate(1158,102)">
+    <g stroke="#ffcf86" stroke-width="7" stroke-linecap="round" opacity="0.9">
+      <line x1="0" y1="-58" x2="0" y2="-76"/>
+      <line x1="0" y1="58"  x2="0" y2="76"/>
+      <line x1="-58" y1="0" x2="-76" y2="0"/>
+      <line x1="58"  y1="0" x2="76"  y2="0"/>
+      <line x1="-41" y1="-41" x2="-54" y2="-54"/>
+      <line x1="41"  y1="-41" x2="54"  y2="-54"/>
+      <line x1="-41" y1="41"  x2="-54" y2="54"/>
+      <line x1="41"  y1="41"  x2="54"  y2="54"/>
+    </g>
+    <circle r="44" fill="#ffd894"/>
+    <circle r="44" fill="none" stroke="#ffc46b" stroke-width="3" opacity="0.55"/>
+  </g>
+
+  <!-- ===== confetti ===== -->
+  <g>
+    <circle cx="620" cy="96"  r="7" fill="#9fdec4"/>
+    <rect x="790" y="120" width="13" height="13" rx="3" fill="#f9b8c6" transform="rotate(18 796 126)"/>
+    <circle cx="940" cy="76" r="6" fill="#c3b2ef"/>
+    <rect x="1010" y="170" width="12" height="12" rx="3" fill="#9fdec4" transform="rotate(-24 1016 176)"/>
+    <circle cx="1268" cy="300" r="7" fill="#f9b8c6"/>
+    <rect x="1180" y="420" width="13" height="13" rx="3" fill="#c3b2ef" transform="rotate(30 1186 426)"/>
+    <circle cx="1040" cy="490" r="8" fill="#9fdec4"/>
+    <rect x="880" y="430" width="12" height="12" rx="3" fill="#ffd894" transform="rotate(-15 886 436)"/>
+    <circle cx="740" cy="500" r="6" fill="#c3b2ef"/>
+    <circle cx="540" cy="110" r="5" fill="#f2708f" opacity="0.7"/>
+    <rect x="470" y="470" width="12" height="12" rx="3" fill="#f9b8c6" transform="rotate(12 476 476)"/>
+    <circle cx="66" cy="100" r="7" fill="#f9b8c6"/>
+    <rect x="140" y="64" width="13" height="13" rx="3" fill="#9fdec4" transform="rotate(-20 146 70)"/>
+    <circle cx="240" cy="110" r="5" fill="#c3b2ef"/>
+    <circle cx="420" cy="72" r="6" fill="#ffd894"/>
+  </g>
+
+  <!-- ===== clapperboard, left ===== -->
+  <g transform="translate(120,170) rotate(-4)">
+    <!-- soft shadow -->
+    <ellipse cx="160" cy="292" rx="200" ry="26" fill="#e8b7c8" opacity="0.35"/>
+
+    <!-- open top slate -->
+    <g transform="rotate(-14 8 82)">
+      <rect x="0" y="30" width="330" height="56" rx="12" fill="#5d4a72"/>
+      <g>
+        <polygon points="22,30 82,30 60,86 0,86"  fill="#f9b8c6"/>
+        <polygon points="82,30 142,30 120,86 60,86" fill="#fff6ee"/>
+        <polygon points="142,30 202,30 180,86 120,86" fill="#a8e3cb"/>
+        <polygon points="202,30 262,30 240,86 180,86" fill="#fff6ee"/>
+        <polygon points="262,30 322,30 300,86 240,86" fill="#c3b2ef"/>
+      </g>
+      <rect x="0" y="30" width="330" height="56" rx="12" fill="none" stroke="#5d4a72" stroke-width="7"/>
+    </g>
+
+    <!-- hinge -->
+    <circle cx="12" cy="92" r="14" fill="#5d4a72"/>
+    <circle cx="12" cy="92" r="5.5" fill="#ffd894"/>
+
+    <!-- lower slate bar -->
+    <rect x="0" y="92" width="330" height="52" rx="10" fill="#5d4a72"/>
+    <g>
+      <polygon points="30,92 90,92 68,144 8,144"   fill="#c3b2ef"/>
+      <polygon points="90,92 150,92 128,144 68,144" fill="#fff6ee"/>
+      <polygon points="150,92 210,92 188,144 128,144" fill="#f9b8c6"/>
+      <polygon points="210,92 270,92 248,144 188,144" fill="#fff6ee"/>
+      <polygon points="270,92 328,92 308,144 248,144" fill="#a8e3cb"/>
+    </g>
+    <rect x="0" y="92" width="330" height="52" rx="10" fill="none" stroke="#5d4a72" stroke-width="7"/>
+
+    <!-- board body -->
+    <rect x="0" y="140" width="330" height="160" rx="14" fill="#fffaf3" stroke="#5d4a72" stroke-width="7"/>
+    <line x1="0"   y1="196" x2="330" y2="196" stroke="#e8dced" stroke-width="4"/>
+    <line x1="165" y1="196" x2="165" y2="300" stroke="#e8dced" stroke-width="4"/>
+
+    <!-- board markings -->
+    <rect x="24" y="158" width="120" height="14" rx="7" fill="#c3b2ef"/>
+    <rect x="196" y="158" width="86"  height="14" rx="7" fill="#f9b8c6"/>
+    <rect x="24" y="216" width="96"  height="12" rx="6" fill="#a8e3cb"/>
+    <rect x="24" y="244" width="72"  height="12" rx="6" fill="#ffd894"/>
+
+    <!-- play button in lower-right cell -->
+    <circle cx="248" cy="248" r="34" fill="#f2708f"/>
+    <polygon points="238,230 238,266 270,248" fill="#fffaf3"/>
+  </g>
+
+  <!-- ===== filmstrip along the bottom ===== -->
+  <g>
+    <rect x="0" y="588" width="1280" height="52" fill="#5d4a72"/>
+    <g fill="#fdeaf4">
+      <rect x="18"  y="603" width="26" height="21" rx="5"/>
+      <rect x="82"  y="603" width="26" height="21" rx="5"/>
+      <rect x="146" y="603" width="26" height="21" rx="5"/>
+      <rect x="210" y="603" width="26" height="21" rx="5"/>
+      <rect x="274" y="603" width="26" height="21" rx="5"/>
+      <rect x="338" y="603" width="26" height="21" rx="5"/>
+      <rect x="402" y="603" width="26" height="21" rx="5"/>
+      <rect x="466" y="603" width="26" height="21" rx="5"/>
+      <rect x="530" y="603" width="26" height="21" rx="5"/>
+      <rect x="594" y="603" width="26" height="21" rx="5"/>
+      <rect x="658" y="603" width="26" height="21" rx="5"/>
+      <rect x="722" y="603" width="26" height="21" rx="5"/>
+      <rect x="786" y="603" width="26" height="21" rx="5"/>
+      <rect x="850" y="603" width="26" height="21" rx="5"/>
+      <rect x="914" y="603" width="26" height="21" rx="5"/>
+      <rect x="978" y="603" width="26" height="21" rx="5"/>
+      <rect x="1042" y="603" width="26" height="21" rx="5"/>
+      <rect x="1106" y="603" width="26" height="21" rx="5"/>
+      <rect x="1170" y="603" width="26" height="21" rx="5"/>
+      <rect x="1234" y="603" width="26" height="21" rx="5"/>
+    </g>
+  </g>
+</svg>
+
+<div class="word">Demo<span class="accent">Day</span></div>
+<div class="tag">Lights, camera, Claude.</div>
+<div class="rule"></div>
+
+</div>
+</body>
+</html>

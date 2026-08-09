@@ -1,0 +1,95 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  * { margin: 0; padding: 0; }
+  body { width: 1024px; height: 1024px; overflow: hidden; }
+  .logo {
+    position: relative;
+    width: 1024px; height: 1024px;
+    background:
+      radial-gradient(560px 460px at 6% 106%, #d9f3e7 0%, rgba(217,243,231,0) 70%),
+      radial-gradient(620px 520px at 96% -10%, #ffe9c9 0%, rgba(255,233,201,0) 72%),
+      radial-gradient(480px 420px at 84% 110%, #e6defb 0%, rgba(230,222,251,0) 70%),
+      linear-gradient(135deg, #fff8f0 0%, #ffeef2 55%, #fdeaf4 100%);
+  }
+  svg.art { position: absolute; inset: 0; }
+</style>
+</head>
+<body>
+<div class="logo">
+
+<svg class="art" width="1024" height="1024" viewBox="0 0 1024 1024">
+
+  <!-- ===== confetti ===== -->
+  <g>
+    <circle cx="150" cy="150" r="16" fill="#f9b8c6"/>
+    <rect x="300" y="80" width="30" height="30" rx="7" fill="#9fdec4" transform="rotate(-20 315 95)"/>
+    <circle cx="520" cy="120" r="12" fill="#c3b2ef"/>
+    <rect x="700" y="120" width="28" height="28" rx="7" fill="#f9b8c6" transform="rotate(18 714 134)"/>
+    <circle cx="880" cy="200" r="15" fill="#9fdec4"/>
+    <circle cx="120" cy="480" r="12" fill="#ffd894"/>
+    <circle cx="924" cy="470" r="13" fill="#c3b2ef"/>
+    <rect x="96" y="740" width="28" height="28" rx="7" fill="#c3b2ef" transform="rotate(30 110 754)"/>
+    <circle cx="890" cy="760" r="16" fill="#f9b8c6"/>
+    <rect x="470" y="920" width="26" height="26" rx="7" fill="#9fdec4" transform="rotate(-15 483 933)"/>
+    <circle cx="300" cy="912" r="12" fill="#ffd894"/>
+    <rect x="680" y="896" width="26" height="26" rx="7" fill="#ffd894" transform="rotate(12 693 909)"/>
+  </g>
+
+  <!-- ===== clapperboard, centered ===== -->
+  <!-- board art spans roughly x:-45..375, y:-95..318 in local coords -->
+  <g transform="translate(512,532) scale(2.34) translate(-168,-110) rotate(-4)">
+    <!-- soft shadow -->
+    <ellipse cx="160" cy="292" rx="200" ry="26" fill="#e8b7c8" opacity="0.35"/>
+
+    <!-- open top slate -->
+    <g transform="rotate(-14 8 82)">
+      <rect x="0" y="30" width="330" height="56" rx="12" fill="#5d4a72"/>
+      <g>
+        <polygon points="22,30 82,30 60,86 0,86"  fill="#f9b8c6"/>
+        <polygon points="82,30 142,30 120,86 60,86" fill="#fff6ee"/>
+        <polygon points="142,30 202,30 180,86 120,86" fill="#a8e3cb"/>
+        <polygon points="202,30 262,30 240,86 180,86" fill="#fff6ee"/>
+        <polygon points="262,30 322,30 300,86 240,86" fill="#c3b2ef"/>
+      </g>
+      <rect x="0" y="30" width="330" height="56" rx="12" fill="none" stroke="#5d4a72" stroke-width="7"/>
+    </g>
+
+    <!-- hinge -->
+    <circle cx="12" cy="92" r="14" fill="#5d4a72"/>
+    <circle cx="12" cy="92" r="5.5" fill="#ffd894"/>
+
+    <!-- lower slate bar -->
+    <rect x="0" y="92" width="330" height="52" rx="10" fill="#5d4a72"/>
+    <g>
+      <polygon points="30,92 90,92 68,144 8,144"   fill="#c3b2ef"/>
+      <polygon points="90,92 150,92 128,144 68,144" fill="#fff6ee"/>
+      <polygon points="150,92 210,92 188,144 128,144" fill="#f9b8c6"/>
+      <polygon points="210,92 270,92 248,144 188,144" fill="#fff6ee"/>
+      <polygon points="270,92 328,92 308,144 248,144" fill="#a8e3cb"/>
+    </g>
+    <rect x="0" y="92" width="330" height="52" rx="10" fill="none" stroke="#5d4a72" stroke-width="7"/>
+
+    <!-- board body -->
+    <rect x="0" y="140" width="330" height="160" rx="14" fill="#fffaf3" stroke="#5d4a72" stroke-width="7"/>
+    <line x1="0"   y1="196" x2="330" y2="196" stroke="#e8dced" stroke-width="4"/>
+    <line x1="165" y1="196" x2="165" y2="300" stroke="#e8dced" stroke-width="4"/>
+
+    <!-- board markings -->
+    <rect x="24" y="158" width="120" height="14" rx="7" fill="#c3b2ef"/>
+    <rect x="196" y="158" width="86"  height="14" rx="7" fill="#f9b8c6"/>
+    <rect x="24" y="216" width="96"  height="12" rx="6" fill="#a8e3cb"/>
+    <rect x="24" y="244" width="72"  height="12" rx="6" fill="#ffd894"/>
+
+    <!-- play button in lower-right cell -->
+    <circle cx="248" cy="248" r="34" fill="#f2708f"/>
+    <polygon points="238,230 238,266 270,248" fill="#fffaf3"/>
+  </g>
+
+</svg>
+
+</div>
+</body>
+</html>
