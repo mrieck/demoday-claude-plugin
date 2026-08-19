@@ -23,6 +23,27 @@ https://github.com/user-attachments/assets/18bf039d-789f-4685-91fe-96c1b051cb4d
 *Sample demo video of Overboard, another Claude Plugin (project dashboard), narrated and
 edited entirely by DemoDay, including the sea-captain voiceover using ElevenLabs.*
 
+## 📱 Shorts
+
+The same project can also be cut into a vertical **Short** for YouTube Shorts,
+Instagram Reels and TikTok — say *"make a short"* (or "vertical video", "Reel",
+"TikTok") and Claude picks one of four named styles with you:
+
+| style | feels like |
+|---|---|
+| `listicle` | "3 ways it fixes X" — numbered rundown, a cut every ~1.5s, presenter anchored under the demo |
+| `cohost` | screenshare with the presenter talking below it throughout |
+| `flashcard` | big typographic cards asking, the UI answering — no face |
+| `glide` | one immersive screen recording, the camera gliding to each click |
+
+https://github.com/user-attachments/assets/5597a659-5655-4b5e-a2f7-8b77ba55d42a
+
+*Sample listicle Short for [Social Cue](https://trysocialcue.com), a Claude
+plugin that finds conversations worth joining. The presenter is an AI avatar
+made from a photo of the author, speaking with a designed ElevenLabs voice; the
+"it browses for you" beat is a Remotion animation instead of screen capture,
+timed to the narration word by word.*
+
 ## ✨ What you get
 
 - 🖱️ **Claude drives your app** — it rehearses off camera first, then a
@@ -38,6 +59,9 @@ edited entirely by DemoDay, including the sea-captain voiceover using ElevenLabs
 - 🎞️ **Real editing, not a screencast** — title cards, transitions,
   zoom-to-click, callouts, b-roll and audio ducking, rendered with
   [Remotion](https://remotion.dev).
+- 📱 **Vertical Shorts too** — cut a 15–45s 9:16 Short (YouTube Shorts,
+  Reels, TikTok) from the same project in one of four named styles: listicle,
+  cohost, flashcard or glide.
 - 💻 **Films almost anything on a Mac** — web apps, native macOS apps, and
   CLI/terminal programs (yes, it can demo a Claude Code plugin from inside a
   live `claude` session).
@@ -121,7 +145,8 @@ From the repo of the software you want to show off:
 Claude will read the codebase, pitch you two or three flows worth filming, ask
 about goal, audience, length and presenter style, and show you the cost estimate.
 Only after you say yes does it generate a single frame. Ten-ish minutes later
-there's an MP4 in `demo/`.
+there's an MP4 in that video's project folder under `demo/` (each video gets its
+own, e.g. `demo/project-overview/`).
 
 ## 🔍 Under the hood
 
