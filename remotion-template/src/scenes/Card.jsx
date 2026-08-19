@@ -1,5 +1,6 @@
 import React from "react";
 import { AbsoluteFill, useCurrentFrame, useVideoConfig, spring, interpolate, Img, staticFile } from "remotion";
+import { typeScale } from "../theme.js";
 
 /**
  * A pure motion-graphics beat: title card, section break, or the closing CTA.
@@ -10,7 +11,8 @@ import { AbsoluteFill, useCurrentFrame, useVideoConfig, spring, interpolate, Img
  */
 export const Card = ({ scene, theme }) => {
   const frame = useCurrentFrame();
-  const { fps, width } = useVideoConfig();
+  const { fps, width, height } = useVideoConfig();
+  const scale = typeScale(width, height);
 
   const rise = (delayFrames) =>
     spring({ frame: frame - delayFrames, fps, config: { damping: 200 }, durationInFrames: Math.round(fps * 0.6) });
@@ -45,7 +47,7 @@ export const Card = ({ scene, theme }) => {
 
       <div
         style={{
-          font: `800 ${scene.titleSize || 84}px ${theme.font}`,
+          font: `800 ${Math.round((scene.titleSize || 84) * scale)}px ${theme.font}`,
           color: theme.text,
           opacity: titleIn,
           transform: `translateY(${interpolate(titleIn, [0, 1], [26, 0])}px)`,
@@ -68,7 +70,7 @@ export const Card = ({ scene, theme }) => {
       {scene.subtitle ? (
         <div
           style={{
-            font: `500 38px ${theme.font}`,
+            font: `500 ${Math.round(38 * scale)}px ${theme.font}`,
             color: theme.muted,
             opacity: subIn,
             transform: `translateY(${interpolate(subIn, [0, 1], [18, 0])}px)`,
@@ -83,7 +85,7 @@ export const Card = ({ scene, theme }) => {
         <div
           style={{
             marginTop: 46,
-            font: `700 40px ${theme.font}`,
+            font: `700 ${Math.round(40 * scale)}px ${theme.font}`,
             color: theme.text,
             background: theme.primary,
             padding: "16px 40px",

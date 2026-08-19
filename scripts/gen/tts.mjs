@@ -2,9 +2,9 @@
 /**
  * Narration — the first thing generated, and the clock everything else runs on.
  *
- *   node scripts/gen/tts.mjs --project demo --all
- *   node scripts/gen/tts.mjs --project demo --scene intro
- *   node scripts/gen/tts.mjs --text "Hello there" --out demo/audio/test.mp3
+ *   node scripts/gen/tts.mjs --project demo/<slug> --all
+ *   node scripts/gen/tts.mjs --project demo/<slug> --scene intro
+ *   node scripts/gen/tts.mjs --text "Hello there" --out demo/<slug>/audio/test.mp3
  *
  * Why audio first: once a line is spoken we know exactly how long it takes, so the
  * screen capture can be paced to it and the presenter can be lip-synced to it.
@@ -42,7 +42,7 @@ import { sceneDuration, gapAfter } from "../lib/pacing.mjs";
 import { report, info, warn, main, fmtDuration } from "../lib/log.mjs";
 
 const USAGE =
-  "tts.mjs (--project <dir> (--all | --scene <id>)) | (--text <str> --out <file.mp3>) " +
+  "tts.mjs (--project <dir> [--manifest <file>] (--all | --scene <id>)) | (--text <str> --out <file.mp3>) " +
   "[--voice Rachel] [--model fal-ai/elevenlabs/tts/eleven-v3] [--force] " +
   "[--provider fal|elevenlabs] [--voice-id <id>]   (elevenlabs = designed character voice, " +
   "see gen/voice-design.mjs)";
@@ -274,7 +274,8 @@ await main(async () => {
 
   // ---- manifest mode ----
   const projectDir = manifest.resolveProjectDir(args.project);
-  const m = await manifest.load(projectDir);
+  const name = args.manifest || manifest.MANIFEST_NAME;
+  const m = await manifest.load(projectDir, { name });
   const provider = args.provider || m.voice?.provider || "fal";
   const voice = args.voice || m.voice?.voice || "Rachel";
 
@@ -353,7 +354,7 @@ await main(async () => {
     out.push({ scene: scene.id, ...r });
   }
 
-  await manifest.save(projectDir, m);
+  await manifest.save(projectDir, m, { name });
 
   // Prove the invariant held for every scene rather than trusting the arithmetic.
   for (const scene of m.timeline) {

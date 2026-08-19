@@ -14,11 +14,14 @@ cropping, normalising). That split is what makes transitions, captions and
 overlays *on top of* the footage possible in a single deterministic render.
 
 ```bash
-node scripts/render/render.mjs --project demo             # render
-node scripts/render/render.mjs --project demo --studio    # open the editor
+node scripts/render/render.mjs --project demo/<slug>             # render
+node scripts/render/render.mjs --project demo/<slug> --studio    # open the editor
 ```
 
-The first run copies `remotion-template/` into `demo/remotion/` and installs it.
+(`demo/<slug>` is the video's project folder, e.g. `demo/project-overview` —
+one per video.)
+
+The first run copies `remotion-template/` into `demo/<slug>/remotion/` and installs it.
 **It is never overwritten afterwards**, so any edits the user makes there survive.
 
 ## How props reach the renderer
@@ -63,7 +66,9 @@ click — where the viewer is already looking.
 
 Driven by the word timings from `gen/tts.mjs`, grouped into short phrases with the
 spoken word tinted. On by default — most product videos are watched muted at least
-once. Turn off with `"captions": { "enabled": false }`.
+once. Turn off with `"captions": { "enabled": false }`, or per scene with
+`"captions": false` on that scene (e.g. a narrated end card whose caption would
+cover the logo).
 
 Captions only exist for scenes that have a `.words.json`.
 
@@ -97,7 +102,7 @@ already been paid for.
 ## Finally: look at it
 
 ```bash
-node scripts/qa.mjs --project demo
+node scripts/qa.mjs --project demo/<slug>
 ```
 
 Extracts frames and scans narration and typed text for credentials. **Then read

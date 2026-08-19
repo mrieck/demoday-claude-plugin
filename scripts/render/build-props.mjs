@@ -2,7 +2,7 @@
 /**
  * Turn demo.json into Remotion props.
  *
- *   node scripts/render/build-props.mjs --project demo
+ *   node scripts/render/build-props.mjs --project demo/<slug>
  *
  * This is the seam between the pipeline and the compositor, and it does three
  * things the renderer should not have to:
@@ -27,7 +27,7 @@ import { probe } from "../lib/ff.mjs";
 import { minSceneDuration, gapAfter, transitionAfterSec } from "../lib/pacing.mjs";
 import { report, info, warn, main, fmtDuration } from "../lib/log.mjs";
 
-const USAGE = "build-props.mjs --project <dir> [--out <props.json>] [--lenient]";
+const USAGE = "build-props.mjs --project <dir> [--manifest <file>] [--out <props.json>] [--lenient]";
 
 async function readJson(file) {
   try {
@@ -37,14 +37,14 @@ async function readJson(file) {
   }
 }
 
-export async function buildProps(projectDir, { lenient = false } = {}) {
-  const m = await manifest.load(projectDir);
+export async function buildProps(projectDir, { lenient = false, name = manifest.MANIFEST_NAME } = {}) {
+  const m = await manifest.load(projectDir, { name });
   const manifestRef = m;
 
   const check = manifest.validate(m);
   for (const w of check.warnings) warn(w);
   if (!check.ok) {
-    throw new Error(`demo.json is not renderable:\n  - ${check.errors.join("\n  - ")}`);
+    throw new Error(`${name} is not renderable:\n  - ${check.errors.join("\n  - ")}`);
   }
 
   const problems = [];
@@ -97,6 +97,86 @@ export async function buildProps(projectDir, { lenient = false } = {}) {
       if (!existsSync(abs)) problems.push(`scene "${scene.id}": audio not found at ${scene.audio}`);
     }
 
+    // Split bottom-zone artifacts. A missing presenter clip is only fatal when
+    // the presenter is enabled (otherwise the renderer degrades to captions).
+    if (scene.bottom?.kind === "presenter" && m.presenter?.mode !== "none") {
+      const abs = scene.presenterVideo ? manifest.resolveIn(projectDir, scene.presenterVideo) : null;
+      if (!abs || !existsSync(abs)) {
+        problems.push(`scene "${scene.id}": bottom presenter clip missing — run gen/presenter.mjs --all`);
+      }
+    }
+    if (scene.bottom?.kind === "image") {
+      const abs = manifest.resolveIn(projectDir, scene.bottom.image);
+      if (!abs || !existsSync(abs)) {
+        problems.push(`scene "${scene.id}": bottom image not found at ${scene.bottom?.image}`);
+      }
+    }
+
+    // Beat-level artifacts: insert images must exist; face beats need the
+    // presenter clip; a videoStartSec jump must not outrun the capture.
+    for (const [bi, b] of (scene.beats || []).entries()) {
+      if (b.shot === "insert" && b.image) {
+        const abs = manifest.resolveIn(projectDir, b.image);
+        if (!existsSync(abs)) problems.push(`scene "${scene.id}" beats[${bi}]: insert image not found at ${b.image}`);
+      }
+      for (const img of b.shot === "insert" ? b.images || [] : []) {
+        const abs = manifest.resolveIn(projectDir, img);
+        if (!existsSync(abs)) problems.push(`scene "${scene.id}" beats[${bi}]: insert image not found at ${img}`);
+      }
+      if (b.shot === "insert" && !b.image && !b.images?.length && b.prompt) {
+        problems.push(`scene "${scene.id}" beats[${bi}]: insert has a prompt but no generated image yet`);
+      }
+    }
+    // An anchored scene's bottom presenter runs the whole scene from 0 — a clip
+    // meaningfully shorter than the scene freezes at the tail.
+    if (scene.beatLayout === "anchored" && scene.bottom?.kind === "presenter" &&
+        m.presenter?.mode !== "none" && scene.presenterVideo) {
+      const abs = manifest.resolveIn(projectDir, scene.presenterVideo);
+      const pMeta = existsSync(abs) ? await probe(abs).catch(() => null) : null;
+      if (pMeta?.duration && scene.durationSec && pMeta.duration < scene.durationSec - 0.25) {
+        warn(
+          `scene "${scene.id}": anchored bottom presenter clip is ${pMeta.duration.toFixed(1)}s for a ` +
+          `${scene.durationSec.toFixed(1)}s scene — the speaker will freeze for the last ` +
+          `${(scene.durationSec - pMeta.duration).toFixed(1)}s.`
+        );
+      }
+    }
+    if ((scene.beats || []).some((b) => b.shot === "face") && m.presenter?.mode !== "none") {
+      const abs = scene.presenterVideo ? manifest.resolveIn(projectDir, scene.presenterVideo) : null;
+      if (!abs || !existsSync(abs)) {
+        problems.push(`scene "${scene.id}": has face beats but no presenter clip — run gen/presenter.mjs --all`);
+      } else if (scene.beats?.length) {
+        const pMeta = await probe(abs).catch(() => null);
+        const lastPresenterBeat = [...scene.beats].reverse().find(
+          (b) => b.shot === "face" || (b.shot === "split" && scene.bottom?.kind === "presenter")
+        );
+        if (pMeta?.duration && lastPresenterBeat && pMeta.duration < (scene.durationSec || 0) - 0.25 &&
+            lastPresenterBeat.atSec > pMeta.duration - 0.5) {
+          warn(
+            `scene "${scene.id}": the last presenter beat starts at ${lastPresenterBeat.atSec}s but the ` +
+            `presenter clip is only ${pMeta.duration.toFixed(1)}s — the face will freeze.`
+          );
+        }
+      }
+    }
+    if (scene.beats?.length && scene.video) {
+      const abs = manifest.resolveIn(projectDir, scene.video);
+      const vMeta = existsSync(abs) ? await probe(abs).catch(() => null) : null;
+      if (vMeta?.duration) {
+        for (const [bi, b] of scene.beats.entries()) {
+          if (b.videoStartSec == null) continue;
+          const end = bi < scene.beats.length - 1 ? scene.beats[bi + 1].atSec : scene.durationSec || b.atSec;
+          const needed = b.videoStartSec + (end - b.atSec);
+          if (needed > vMeta.duration + 0.1) {
+            warn(
+              `scene "${scene.id}" beats[${bi}]: videoStartSec ${b.videoStartSec}s + window runs to ` +
+              `${needed.toFixed(1)}s but the clip is ${vMeta.duration.toFixed(1)}s — the frame will freeze.`
+            );
+          }
+        }
+      }
+    }
+
     // Inline the event log so DemoClip can zoom toward clicks.
     if (scene.events) {
       const ev = await readJson(manifest.resolveIn(projectDir, scene.events));
@@ -108,8 +188,9 @@ export async function buildProps(projectDir, { lenient = false } = {}) {
       }
     }
 
-    // Inline word timings for captions.
-    if (scene.words) {
+    // Inline word timings for captions. A scene may opt out with `captions: false`
+    // (a narrated end card whose caption would sit on top of the logo, say).
+    if (scene.words && scene.captions !== false) {
       const w = await readJson(manifest.resolveIn(projectDir, scene.words));
       if (w?.timestamps?.length) out.wordTimings = w.timestamps;
     }
@@ -163,7 +244,10 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   await main(async () => {
     const args = parseArgs(process.argv.slice(2));
     const projectDir = manifest.resolveProjectDir(args.project);
-    const props = await buildProps(projectDir, { lenient: Boolean(args.lenient) });
+    const props = await buildProps(projectDir, {
+      lenient: Boolean(args.lenient),
+      name: args.manifest || manifest.MANIFEST_NAME,
+    });
 
     const out = path.resolve(args.out || path.join(projectDir, "remotion", "src", "props.json"));
     await mkdir(path.dirname(out), { recursive: true });

@@ -44,7 +44,9 @@ a presenter shot; it sounds like someone reading a manual at you.
 
 ## The manifest
 
-`demo/demo.json` is the single source of truth. Every script reads and writes it.
+`demo/<slug>/demo.json` is the single source of truth — each video keeps its own
+project folder under `demo/` (e.g. `demo/project-overview/`), and every script
+reads and writes the manifest inside it.
 Anything that exists only in your context is lost on the next run.
 
 ```jsonc
@@ -66,13 +68,38 @@ Anything that exists only in your context is lost on the next run.
   "presenter": { "mode": "hybrid", "description": "a woman in her 30s, smart casual, warm and direct",
                  "characterImage": "assets/presenter.png", "engine": "fal-ai/infinitalk" },
   "music": { "enabled": false, "bed": "assets/bed.mp3", "duckDb": -14 },
-  "captions": { "enabled": true },
+  // style: "clean" (pill near the bottom edge) or "shorts" (big centered
+  // karaoke for vertical cuts — see the demo-shorts skill)
+  "captions": { "enabled": true, "style": "clean" },
   "timeline": [ /* scenes */ ],
   "transitions": [ { "after": "hook", "type": "fade", "ms": 400 } ]
 }
 ```
 
 All paths are **relative to the project directory**. Never store absolute paths.
+
+A vertical Short is a **sibling manifest** (`shorts.json`) in the same project
+dir — same schema, `format` 1080×1920, its own timeline with `s-`-prefixed scene
+ids. Created with `plan.mjs --init --manifest shorts.json --from demo.json
+--style <listicle|cohost|flashcard|glide>`; the whole workflow is in the
+**demo-shorts** skill.
+
+Demo scenes in beat styles carry a `beats` array — the voice flows while the
+picture hard-cuts between windows:
+
+```jsonc
+"captionsStyle": "boxed",                      // per-scene caption override
+"captions": false,                             // no captions on this scene at all
+"captionEmphasis": [ { "match": "average", "tone": "neg" },   // red
+                     { "match": "one click", "tone": "pos" } ], // brand color
+"beats": [
+  { "atSec": 0,   "shot": "face" },                    // full-bleed presenterVideo
+  { "atSec": 1.4, "shot": "screen" },                  // the scene's capture
+  { "atSec": 3.0, "shot": "split" },                   // scene.bottom applies
+  { "atSec": 4.6, "shot": "insert", "title": "DemoDay", "stamp": "#1" },  // or "image"
+  { "atSec": 6.0, "shot": "screen", "videoStartSec": 12 }  // jump the capture
+]
+```
 
 ### Scene kinds
 
@@ -89,7 +116,11 @@ All paths are **relative to the project directory**. Never store absolute paths.
   "actions": "actions/feature-1.json",   // written by demo_save_actions
   "video": "clips/feature-1.mp4",        // written by the perform runner
   "events": "clips/feature-1.events.json",
-  "overlays": [ { "type": "callout", "atSec": 3.2, "text": "One click", "anchor": "lastClick" } ] }
+  "overlays": [ { "type": "callout", "atSec": 3.2, "text": "One click", "anchor": "lastClick" } ],
+  // Only when the composition aspect differs from the capture (a Short cut from
+  // 16:9 footage): "pan" (default — window follows the clicks), "card" (whole UI
+  // letterboxed in a card, with an optional "headline" below), or "cover" (crop).
+  "framing": "pan" }
 
 // On-camera presenter
 { "id": "hook", "kind": "presenter",
@@ -126,7 +157,7 @@ works; "productivity" does not.
 ## Order that saves money
 
 1. Write all narration into `demo.json` first.
-2. `node scripts/plan.mjs --project demo` — check the estimate.
+2. `node scripts/plan.mjs --project demo/<slug>` — check the estimate.
 3. `gen/tts.mjs --all` — now every scene has a real duration.
 4. Capture and generate against those durations.
 

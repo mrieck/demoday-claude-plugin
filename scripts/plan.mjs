@@ -2,8 +2,8 @@
 /**
  * Project status and cost estimate — the gate before anything is paid for.
  *
- *   node scripts/plan.mjs --project demo          # what exists, what's left, what it'll cost
- *   node scripts/plan.mjs --project demo --init --slug acme --name "Acme"
+ *   node scripts/plan.mjs --project demo/<slug>          # what exists, what's left, what it'll cost
+ *   node scripts/plan.mjs --project demo/<slug> --init --slug acme --name "Acme"
  *
  * Generation is the expensive, irreversible-ish part of this pipeline (money, not
  * data), so there is one place that answers "what is about to happen and what will
@@ -14,35 +14,90 @@ import { mkdir } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { parseArgs, boolArg } from "./lib/args.mjs";
 import * as manifest from "./lib/manifest.mjs";
+import { STYLES, STYLE_NAMES } from "./lib/styles.mjs";
 import { estimateCost } from "./lib/models.mjs";
 import { report, info, warn, main, fmtDuration } from "./lib/log.mjs";
 
-const USAGE = "plan.mjs --project <dir> [--init --slug <slug> --name <product>]";
+const USAGE =
+  "plan.mjs --project <dir> [--manifest <file>] " +
+  "[--init --slug <slug> --name <product> [--from <file>] [--format 9:16] [--style listicle]]";
+
+/** Preset dimensions for --format; fps stays 30 across all of them. */
+const FORMAT_PRESETS = {
+  "16:9": { width: 1920, height: 1080, fps: 30 },
+  "9:16": { width: 1080, height: 1920, fps: 30 },
+  "1:1": { width: 1080, height: 1080, fps: 30 },
+};
 
 await main(async () => {
   const args = parseArgs(process.argv.slice(2));
   const projectDir = manifest.resolveProjectDir(args.project);
+  const name = args.manifest || manifest.MANIFEST_NAME;
 
   // ---- init ----
   if (boolArg(args.init, false)) {
-    if (existsSync(manifest.manifestPath(projectDir)) && !boolArg(args.force, false)) {
-      throw new Error(`${manifest.manifestPath(projectDir)} already exists — pass --force to overwrite.`);
+    if (existsSync(manifest.manifestPath(projectDir, name)) && !boolArg(args.force, false)) {
+      throw new Error(`${manifest.manifestPath(projectDir, name)} already exists — pass --force to overwrite.`);
     }
     for (const sub of ["clips", "audio", "assets", "actions", "out"]) {
       await mkdir(path.join(projectDir, sub), { recursive: true });
     }
+
+    // --from copies the identity of an existing manifest in the same project —
+    // brand, voice (incl. a designed voiceId, which is reused for free), presenter —
+    // so a vertical Short starts from the demo's look and sound with a fresh timeline.
+    let from = null;
+    if (args.from) {
+      from = await manifest.load(projectDir, { name: args.from });
+    }
+
+    // --style seeds format/presenter/caption defaults from the catalog;
+    // an explicit --format still wins.
+    const style = args.style ? STYLES[args.style] : null;
+    if (args.style && !style) {
+      throw new Error(`--style must be one of ${STYLE_NAMES.join(" | ")}, got "${args.style}"`);
+    }
+
+    const formatArg = args.format || style?.aspect;
+    const format = formatArg ? FORMAT_PRESETS[formatArg] : null;
+    if (formatArg && !format) {
+      throw new Error(`--format must be one of ${Object.keys(FORMAT_PRESETS).join(" | ")}, got "${formatArg}"`);
+    }
+    const vertical = format && format.height > format.width;
+
     const m = manifest.blankManifest({
-      slug: args.slug || path.basename(projectDir),
-      name: args.name || "",
+      slug: args.slug ||
+        (from
+          ? `${from.slug}${vertical && !from.slug.endsWith("-short") ? "-short" : ""}`
+          : path.basename(projectDir)),
+      name: args.name || from?.product?.name || "",
     });
-    await manifest.save(projectDir, m);
-    return report(`  created ${manifest.manifestPath(projectDir)}`, {
-      ok: true, created: true, project: projectDir,
+    if (from) {
+      m.product = structuredClone(from.product);
+      m.brand = structuredClone(from.brand);
+      m.voice = structuredClone(from.voice);
+      m.presenter = structuredClone(from.presenter);
+      m.pacing = structuredClone(from.pacing);
+    }
+    if (format) m.format = format;
+    // Shorts default to the karaoke caption style; landscape keeps the clean pill.
+    if (vertical) m.captions = { enabled: true, style: "shorts" };
+    if (style) {
+      m.style = args.style;
+      m.presenter.mode = style.presenterMode;
+      m.captions = { enabled: true, style: style.captionsStyle };
+      // Cut-driven styles carry no scene transitions; the beats do the cutting.
+      if (style.transitionPolicy === "cuts") m.transitions = [];
+    }
+
+    await manifest.save(projectDir, m, { name });
+    return report(`  created ${manifest.manifestPath(projectDir, name)}`, {
+      ok: true, created: true, project: projectDir, manifest: name,
     });
   }
 
   // ---- status ----
-  const m = await manifest.load(projectDir);
+  const m = await manifest.load(projectDir, { name });
   const check = manifest.validate(m);
   const pending = manifest.pending(projectDir, m);
   const cost = estimateCost(m);

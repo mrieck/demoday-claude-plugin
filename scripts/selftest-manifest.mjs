@@ -90,6 +90,32 @@ await main(async () => {
     for (let i = 0; i < 6; i++) assert(finalScene[`f${i}`] === i, `concurrent field f${i} lost`);
     info("  6 concurrent saves: all fields survived");
 
+    // A sibling manifest (shorts.json) coexists: independent files, independent
+    // locks, and edits to one never bleed into the other.
+    const shorts = manifest.blankManifest({ slug: "race-short" });
+    shorts.format = { width: 1080, height: 1920, fps: 30 };
+    shorts.timeline = [{ id: "s-hook", kind: "card", durationSec: 3, title: "hi" }];
+    await manifest.save(dir, shorts, { name: "shorts.json" });
+
+    const mainAgain = await manifest.load(dir);
+    const shortsAgain = await manifest.load(dir, { name: "shorts.json" });
+    manifest.patchScene(mainAgain, "hook", { narration: "landscape only" });
+    manifest.patchScene(shortsAgain, "s-hook", { title: "vertical only" });
+    await Promise.all([
+      manifest.save(dir, mainAgain),
+      manifest.save(dir, shortsAgain, { name: "shorts.json" }),
+    ]);
+
+    const mainFinal = await manifest.load(dir);
+    const shortsFinal = await manifest.load(dir, { name: "shorts.json" });
+    assert(mainFinal.slug === "race", "demo.json slug changed by sibling save");
+    assert(shortsFinal.slug === "race-short", "shorts.json slug changed by sibling save");
+    assert(manifest.getScene(mainFinal, "hook").narration === "landscape only", "demo.json edit lost");
+    assert(shortsFinal.format.height === 1920, "shorts.json format lost");
+    assert(!mainFinal.timeline.some((s) => s.id === "s-hook"), "shorts scene leaked into demo.json");
+    assert(manifest.getScene(shortsFinal, "s-hook").title === "vertical only", "shorts.json edit lost");
+    info("  sibling shorts.json: coexists without bleed");
+
     report("  PASS — manifest merge + lock behave", { ok: true });
   } finally {
     await rm(dir, { recursive: true, force: true });

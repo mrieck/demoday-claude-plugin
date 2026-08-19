@@ -3,8 +3,8 @@
  * Performance pass for desktop demos — the counterpart to web-perform.mjs.
  *
  *   node scripts/capture/mac-perform.mjs \
- *     --actions demo/actions/settings.json \
- *     --out demo/clips/settings.mp4 \
+ *     --actions demo/<slug>/actions/settings.json \
+ *     --out demo/<slug>/clips/settings.mp4 \
  *     --app "Visual Studio Code" \
  *     --target-duration 12.1
  *

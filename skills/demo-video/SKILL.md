@@ -16,7 +16,14 @@ You are producing a finished video of someone's software. Not a screen recording
 a *demo*: narrated, paced, with an intro, transitions and a point.
 
 `$CLAUDE_PLUGIN_ROOT` is the plugin root. Every command below runs from there
-unless stated. The demo project lives in `<repo>/demo/` by default.
+unless stated. Each video is its own project directory under `<repo>/demo/`,
+named with a short kebab-case description of *that video*:
+`demo/project-overview/` for a generic overview, `demo/onboarding-flow/`,
+`demo/v2-launch/`. A repo accumulates one subfolder per video. Pick the folder
+name when you pick the slug (they should match) and pass it as `--project
+demo/<slug>` on **every** script call — never bare `--project demo`, and never
+rely on the default project dir. The examples below write `demo/<slug>`; always
+substitute the real folder.
 
 ## The one thing to understand first
 
@@ -57,10 +64,28 @@ if it is a desktop app. Do not guess a port.
 
 Use AskUserQuestion. The answers change the whole shape of the video:
 
+- **Style — "which of these is it most like?"** Show the catalog and let the
+  user pick; each name is a complete look with sensible defaults
+  (`plan.mjs --init --style <name>` applies them):
+
+  | style | aspect | feels like |
+  |---|---|---|
+  | `launch` | 16:9 | Classic product demo: presenter intro/outro, narrated capture, b-roll |
+  | `anchor` | 16:9 | Avatar-led: the presenter is always on screen — full-frame between demos, corner bubble over them |
+  | `explainer` | 16:9 | No face: motion-graphic cards + voiceover over demos |
+  | `listicle` | 9:16 | "5 plugins that fix X" — numbered rundown, a cut every ~1.5s |
+  | `cohost` | 9:16 | Screenshare: demo on top, person talking below throughout |
+  | `flashcard` | 9:16 | No face: big text cards alternate with UI clips on fast cuts |
+  | `glide` | 9:16 | One immersive capture, the camera gliding to each click |
+
+  The 16:9 styles run on this skill directly (they are presenter-mode +
+  transition presets). The 9:16 styles are Shorts — hand off to the
+  **demo-shorts** skill for their recipes.
+
 - **Goal and audience** — a launch trailer, an onboarding walkthrough, and an
   investor demo are different videos.
-- **Length** — 30s, 60s, 2min. Default to 60s.
-- **Presenter mode** — see below. Default `hybrid`.
+- **Length** — 30s, 60s, 2min. Default to 60s. (Shorts: 15–45s.)
+- **Presenter mode** — see below; the style already picked a default.
 - **Voice** — *only if doctor showed `ELEVENLABS_API_KEY` set*: offer a custom
   character voice designed from a prose description ("weathered New England
   lobster-boat captain, gravelly, thick coastal accent") — great for themed or
@@ -82,10 +107,10 @@ separate voice for the on-camera segments.
 ## 3. Script
 
 ```bash
-node scripts/plan.mjs --project demo --init --slug <slug> --name "<Product>"
+node scripts/plan.mjs --project demo/<slug> --init --slug <slug> --name "<Product>"
 ```
 
-Then write `demo/demo.json`. See the **demo-script** skill for the schema and how
+Then write `demo/<slug>/demo.json`. See the **demo-script** skill for the schema and how
 to write narration that fits a demo. Sketch of a 60s hybrid video:
 
 | id | kind | ~sec | purpose |
@@ -99,7 +124,7 @@ to write narration that fits a demo. Sketch of a 60s hybrid video:
 Show the user the plan and the cost before spending anything:
 
 ```bash
-node scripts/plan.mjs --project demo
+node scripts/plan.mjs --project demo/<slug>
 ```
 
 **Get explicit approval of the estimate before step 4.** That is the point at
@@ -112,15 +137,15 @@ script is written** (previews audition with the real first line) and **before an
 narration is generated** (every scene uses it):
 
 ```bash
-node scripts/gen/voice-design.mjs --project demo \
+node scripts/gen/voice-design.mjs --project demo/<slug> \
   --describe "Weathered 60-year-old New England lobster-boat captain, gravelly, thick coastal Maine accent" \
   --name "Captain"
 ```
 
 That designs ~3 previews, **auto-accepts the first**, writes
 `voice.provider/voiceId` into `demo.json`, and keeps all previews in
-`demo/audio/voice-previews/`. Tell the user to listen (`afplay
-demo/audio/voice-previews/preview-1.mp3`) and, if a different candidate is
+`demo/<slug>/audio/voice-previews/`. Tell the user to listen (`afplay
+demo/<slug>/audio/voice-previews/preview-1.mp3`) and, if a different candidate is
 better, run `--pick 2` / `--pick 3` **promptly** — un-accepted previews expire.
 To hear candidates before anything is saved, add `--audition` and then `--pick N`.
 
@@ -135,7 +160,7 @@ Know these three behaviours:
 ## 4. Narration first
 
 ```bash
-node scripts/gen/tts.mjs --project demo --all
+node scripts/gen/tts.mjs --project demo/<slug> --all
 ```
 
 Writes an mp3 and a `.words.json` per scene, and records the measured duration
@@ -150,7 +175,7 @@ macOS app, `demo_open_cli` for a terminal program:
   reading a selector off a screenshot is guessing, and guesses break on replay.
 - Every successful action is recorded automatically. Failed ones are not.
 - `demo_undo_step` drops an action that worked but does not belong in the video.
-- `demo_save_actions --file demo/actions/<scene>.json` when the flow is right.
+- `demo_save_actions --file demo/<slug>/actions/<scene>.json` when the flow is right.
 
 While rehearsing, **tell the user what part of the app you are exercising** and
 what you found. That running commentary is half the value of this whole process.
@@ -163,9 +188,9 @@ Pass the narration duration so the footage lands on the voiceover:
 
 ```bash
 node scripts/capture/web-perform.mjs \
-  --actions demo/actions/feature-1.json \
-  --out demo/clips/feature-1.mp4 \
-  --timestamps demo/audio/feature-1.words.json \
+  --actions demo/<slug>/actions/feature-1.json \
+  --out demo/<slug>/clips/feature-1.mp4 \
+  --timestamps demo/<slug>/audio/feature-1.words.json \
   --target-duration 14.0
 ```
 
@@ -182,9 +207,9 @@ beside the clip):
 
 ```bash
 node scripts/capture/cli-perform.mjs \
-  --actions demo/actions/feature-1.json \
+  --actions demo/<slug>/actions/feature-1.json \
   --cwd /path/to/demo-project \
-  --out demo/clips/feature-1.mp4 \
+  --out demo/<slug>/clips/feature-1.mp4 \
   --target-duration 14.0
 ```
 
@@ -196,8 +221,8 @@ skill's CLI section for staging, `waitStable` and pre-approved permissions.
 ## 7. Presenter and b-roll
 
 ```bash
-node scripts/gen/presenter.mjs --project demo --all   # face generated once, reused
-node scripts/gen/broll.mjs --project demo --all       # still → video, with model fallback
+node scripts/gen/presenter.mjs --project demo/<slug> --all   # face generated once, reused
+node scripts/gen/broll.mjs --project demo/<slug> --all       # still → video, with model fallback
 ```
 
 These two are safe to run in parallel — manifest saves merge instead of
@@ -210,10 +235,10 @@ thing) rarely lands in one prompt. Iterate on the **still** before animating —
 a still costs cents, a video costs dollars:
 
 ```bash
-node scripts/gen/still.mjs --project demo --out assets/shot.png \
+node scripts/gen/still.mjs --project demo/<slug> --out assets/shot.png \
   --prompt "wide shot on the deck of a trawler at golden hour…"
 
-node scripts/gen/still.mjs --project demo --out assets/shot-v2.png \
+node scripts/gen/still.mjs --project demo/<slug> --out assets/shot-v2.png \
   --edit "give each creature a soft contact shadow on the wet deck" \
   --from assets/shot.png --ref assets/presenter.png
 ```
@@ -231,16 +256,16 @@ are cache hits and cost nothing.
 ## 8. Render
 
 ```bash
-node scripts/render/render.mjs --project demo
+node scripts/render/render.mjs --project demo/<slug>
 ```
 
-First run scaffolds a Remotion app into `demo/remotion/` and installs it. The user
+First run scaffolds a Remotion app into `demo/<slug>/remotion/` and installs it. The user
 can open `--studio` to tweak anything and their edits survive re-renders.
 
 ## 9. QA — actually look at it
 
 ```bash
-node scripts/qa.mjs --project demo
+node scripts/qa.mjs --project demo/<slug>
 ```
 
 Then **read a sample of the extracted frames**. There is no automatic grader. You
@@ -252,6 +277,18 @@ visible on screen (a real email in a sidebar, a live API key in a settings page)
 is only caught by looking at the frames.
 
 Re-running regenerates only what changed, so fixing one scene is cheap.
+
+## 10. Optional: a vertical Short
+
+Once the demo is done, a 15–45s vertical cut for YouTube Shorts / Reels / TikTok
+can be made from the same project — reusing the captures, voice and best
+narration lines for pennies. See the **demo-shorts** skill; it starts with:
+
+```bash
+node scripts/plan.mjs --project demo/<slug> --init --manifest shorts.json --from demo.json --format 9:16
+```
+
+Offer this when the demo wraps; do not build it unasked.
 
 ---
 

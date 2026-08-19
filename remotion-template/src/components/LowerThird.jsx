@@ -1,9 +1,12 @@
 import React from "react";
-import { useCurrentFrame, interpolate, spring, Easing } from "remotion";
+import { useCurrentFrame, useVideoConfig, interpolate, spring, Easing } from "remotion";
+import { typeScale } from "../theme.js";
 
 /** Name/role strap that slides in under a presenter. */
 export const LowerThird = ({ title, subtitle, theme, startSec = 0.6, fps = 30, durationSec = 3.4 }) => {
   const frame = useCurrentFrame();
+  const { width, height } = useVideoConfig();
+  const scale = typeScale(width, height);
   const start = startSec * fps;
   const end = (startSec + durationSec) * fps;
   if (frame < start || frame > end) return null;
@@ -28,11 +31,11 @@ export const LowerThird = ({ title, subtitle, theme, startSec = 0.6, fps = 30, d
         paddingLeft: 22,
       }}
     >
-      <div style={{ font: `700 46px ${theme.font}`, color: theme.text, textShadow: "0 3px 14px rgba(0,0,0,.6)" }}>
+      <div style={{ font: `700 ${Math.round(46 * scale)}px ${theme.font}`, color: theme.text, textShadow: "0 3px 14px rgba(0,0,0,.6)" }}>
         {title}
       </div>
       {subtitle ? (
-        <div style={{ font: `500 28px ${theme.font}`, color: theme.muted, marginTop: 6 }}>
+        <div style={{ font: `500 ${Math.round(28 * scale)}px ${theme.font}`, color: theme.muted, marginTop: 6 }}>
           {subtitle}
         </div>
       ) : null}

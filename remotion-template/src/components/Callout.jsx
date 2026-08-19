@@ -1,5 +1,6 @@
 import React from "react";
 import { interpolate, spring, useVideoConfig } from "remotion";
+import { typeScale } from "../theme.js";
 
 /**
  * A label pinned over the footage — "one click", "no config needed".
@@ -8,7 +9,7 @@ import { interpolate, spring, useVideoConfig } from "remotion";
  * the viewer is already looking. Otherwise it takes an explicit position.
  */
 export const Callout = ({ overlay, events, ms, theme }) => {
-  const { fps } = useVideoConfig();
+  const { fps, width, height } = useVideoConfig();
   const startMs = (overlay.atSec ?? 0) * 1000;
   const durMs = (overlay.durationSec ?? 2.2) * 1000;
   if (ms < startMs || ms > startMs + durMs) return null;
@@ -40,7 +41,7 @@ export const Callout = ({ overlay, events, ms, theme }) => {
         opacity: exit,
         background: theme.primary,
         color: "#fff",
-        font: `600 30px ${theme.font}`,
+        font: `600 ${Math.round(30 * typeScale(width, height))}px ${theme.font}`,
         padding: "12px 22px",
         borderRadius: 999,
         boxShadow: "0 12px 34px rgba(0,0,0,.42)",

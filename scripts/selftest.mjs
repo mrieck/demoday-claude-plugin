@@ -115,6 +115,15 @@ await main(async () => {
         .map((word, i) => ({ text: word, startSec: 0.4 + i * 0.75, endSec: 0.4 + i * 0.75 + 0.6 })),
     }, null, 2)
   );
+  await writeFile(
+    path.join(dir, "audio", "cli.words.json"),
+    JSON.stringify({
+      text: "One slash command and the plugin does the rest.",
+      timestamps: "One slash command and the plugin does the rest."
+        .split(" ")
+        .map((word, i) => ({ text: word, startSec: 0.3 + i * 0.6, endSec: 0.3 + i * 0.6 + 0.5 })),
+    }, null, 2)
+  );
 
   // ---- the manifest --------------------------------------------------------
   const m = manifest.blankManifest({ slug: "selftest", name: "Selftest" });
@@ -166,43 +175,201 @@ await main(async () => {
   if (!check.ok) throw new Error(`selftest manifest is invalid:\n  - ${check.errors.join("\n  - ")}`);
   info(`  manifest valid (${m.timeline.length} scenes)`);
 
-  const expected =
-    m.timeline.reduce((s, x) => s + x.durationSec, 0) -
-    m.transitions.reduce((s, t) => s + t.ms / 1000, 0);
+  /** Validate, render and dimension-check one manifest. */
+  async function runRenderPass({ label, manifestName, outName, expectW, expectH, expectedSec }) {
+    info(`  rendering ${label}…`);
+    const out = path.join(dir, "out", outName);
+    const renderArgs = [
+      path.join(PLUGIN_ROOT, "scripts", "render", "render.mjs"),
+      // Always test the CURRENT template — a kept/re-used project dir would
+      // otherwise silently render with whatever was scaffolded last time.
+      "--project", dir, "--out", out, "--sync-template",
+    ];
+    if (manifestName) renderArgs.push("--manifest", manifestName);
+    await run("node", renderArgs);
 
-  // ---- render --------------------------------------------------------------
-  info("  rendering…");
-  const out = path.join(dir, "out", "selftest.mp4");
-  await run("node", [path.join(PLUGIN_ROOT, "scripts", "render", "render.mjs"), "--project", dir, "--out", out]);
-
-  if (!existsSync(out)) throw new Error("render produced no file");
-  const meta = await probe(out);
-  const drift = Math.abs((meta.duration || 0) - expected);
-
-  const ok = drift <= 0.5 && meta.width === 1280 && meta.height === 720;
-  if (!ok) {
-    warn(`expected ${fmtDuration(expected)} at 1280x720, got ${fmtDuration(meta.duration)} at ${meta.width}x${meta.height}`);
+    if (!existsSync(out)) throw new Error(`${label}: render produced no file`);
+    const meta = await probe(out);
+    const drift = Math.abs((meta.duration || 0) - expectedSec);
+    const ok = drift <= 0.5 && meta.width === expectW && meta.height === expectH;
+    if (!ok) {
+      warn(
+        `${label}: expected ${fmtDuration(expectedSec)} at ${expectW}x${expectH}, ` +
+        `got ${fmtDuration(meta.duration)} at ${meta.width}x${meta.height}`
+      );
+    }
+    return { label, ok, video: out, expectedSec, actualSec: meta.duration, driftSec: drift, width: meta.width, height: meta.height };
   }
 
+  const expectedRuntime = (mm) =>
+    mm.timeline.reduce((s, x) => s + x.durationSec, 0) -
+    (mm.transitions || []).reduce((s, t) => s + t.ms / 1000, 0);
+
+  // ---- pass 1: the classic landscape render --------------------------------
+  const landscape = await runRenderPass({
+    label: "landscape",
+    outName: "selftest.mp4",
+    expectW: 1280, expectH: 720,
+    expectedSec: expectedRuntime(m),
+  });
+
+  // ---- pass 2: a vertical Short from the SAME project -----------------------
+  // A sibling shorts.json reuses the landscape media, which is exactly how a real
+  // Short is cut: the 16:9 capture lands in a 9:16 frame, so this exercises the
+  // pan framing (with edge-clamping clicks), the card framing with a headline,
+  // and the karaoke caption style. 540x960 keeps the render quick.
+  await writeFile(
+    path.join(dir, "clips", "demo.shorts.events.json"),
+    JSON.stringify({
+      version: 1, clip: "demo.mp4", viewport: { width: 1280, height: 720 }, durationSec: 9,
+      events: [
+        // Clicks hard against both edges of the source, so the pan window has to
+        // clamp at each end instead of exposing background.
+        { type: "click", atMs: 1800, x: 40, y: 140, label: "left edge" },
+        { type: "click", atMs: 5200, x: 1240, y: 430, label: "right edge" },
+      ],
+    }, null, 2)
+  );
+
+  // Fixtures for the split bottom zones: a fake talking-head clip and stills
+  // (two, so an insert `images` spread has something to fan out).
+  await fakeClip(path.join(dir, "clips", "presenter-bottom.mp4"), { seconds: 6, w: 640, h: 640, pattern: "smptehdbars" });
+  await ffmpeg([
+    "-f", "lavfi", "-i", "testsrc2=size=640x640:rate=1",
+    "-frames:v", "1", path.join(dir, "assets", "split-bottom.png"),
+  ]);
+  await ffmpeg([
+    "-f", "lavfi", "-i", "rgbtestsrc=size=640x640:rate=1",
+    "-frames:v", "1", path.join(dir, "assets", "spread-2.png"),
+  ]);
+
+  const short = manifest.blankManifest({ slug: "selftest-short", name: "Selftest Short" });
+  short.format = { width: 540, height: 960, fps: 30 };
+  // hybrid, not none: "none" would degrade the bottom-presenter scene to captions.
+  short.presenter.mode = "hybrid";
+  short.captions = { enabled: true, style: "shorts" };
+  short.timeline = [
+    {
+      // framing deliberately omitted: the aspect mismatch must auto-default to
+      // split, with the top zone falling back to its own pan.
+      id: "s-hook", kind: "demo", target: "web", durationSec: 9,
+      narration: "Create a project and it appears instantly in your dashboard.",
+      audio: "audio/demo.mp3", words: "audio/demo.words.json",
+      video: "clips/demo.mp4", events: "clips/demo.shorts.events.json",
+      overlays: [{ type: "callout", atSec: 1.9, text: "One click", anchor: "lastClick" }],
+      bottom: {
+        kind: "bullets",
+        bullets: [
+          { text: "One click to create", atSec: 1.5 },
+          { text: "Instant dashboard", atSec: 4.0 },
+          { text: "Zero setup" },
+        ],
+      },
+    },
+    {
+      id: "s-present", kind: "demo", target: "cli", durationSec: 6,
+      framing: "split",
+      narration: "One slash command and the plugin does the rest.",
+      audio: "audio/cli.mp3",
+      video: "clips/cli.mp4", events: "clips/cli.events.json",
+      bottom: { kind: "presenter" },
+      presenterVideo: "clips/presenter-bottom.mp4",
+    },
+    {
+      id: "s-image", kind: "demo", target: "web", durationSec: 5,
+      framing: "split", splitPct: 0.5,
+      narration: "Teams ship faster.",
+      audio: "audio/broll.mp3",
+      video: "clips/broll.mp4",
+      bottom: { kind: "image", image: "assets/split-bottom.png" },
+    },
+    {
+      id: "s-caption", kind: "demo", target: "web", durationSec: 9,
+      framing: "split",
+      narration: "Create a project and it appears instantly in your dashboard.",
+      audio: "audio/demo.mp3", words: "audio/demo.words.json",
+      video: "clips/demo.mp4", events: "clips/demo.shorts.events.json",
+      // no bottom: defaults to big centered karaoke captions in the zone
+    },
+    {
+      id: "s-card", kind: "demo", target: "cli", durationSec: 6,
+      framing: "card", headline: "The whole UI, letterboxed",
+      narration: "One slash command and the plugin does the rest.",
+      audio: "audio/cli.mp3",
+      video: "clips/cli.mp4", events: "clips/cli.events.json",
+    },
+    {
+      // The beat engine: one narrated scene, five hard-cut windows covering
+      // every shot type, with boxed semantic-color captions.
+      id: "s-beats", kind: "demo", target: "cli", durationSec: 6,
+      narration: "One slash command and the plugin does the rest.",
+      audio: "audio/cli.mp3", words: "audio/cli.words.json",
+      video: "clips/demo.mp4", events: "clips/demo.shorts.events.json",
+      presenterVideo: "clips/presenter-bottom.mp4",
+      bottom: { kind: "presenter" },
+      captionsStyle: "boxed",
+      captionEmphasis: [
+        { match: "slash", tone: "neg" },
+        { match: "plugin", tone: "pos" },
+      ],
+      beats: [
+        { atSec: 0, shot: "face" },
+        { atSec: 1.2, shot: "screen", framing: "cover" },
+        { atSec: 2.6, shot: "split" },
+        { atSec: 4.0, shot: "insert", image: "assets/split-bottom.png", stamp: "#1" },
+        { atSec: 5.0, shot: "screen", videoStartSec: 3 },
+      ],
+    },
+    {
+      // The anchored beat layout: bottom presenter runs the whole scene while
+      // the top pane hard-cuts; full-bleed punch-ins (face + animated insert
+      // with an images spread and a stamp) layer over it; boxed captions ride
+      // the seam / drop low / center per the active beat automatically, with
+      // one explicit per-beat captionPlacement override.
+      id: "s-anchored", kind: "demo", target: "cli", durationSec: 6,
+      narration: "One slash command and the plugin does the rest.",
+      audio: "audio/cli.mp3", words: "audio/cli.words.json",
+      video: "clips/demo.mp4", events: "clips/demo.shorts.events.json",
+      presenterVideo: "clips/presenter-bottom.mp4",
+      beatLayout: "anchored", splitPct: 0.42,
+      bottom: { kind: "presenter" }, presenterFocusY: "50% 22%",
+      captionsStyle: "boxed",
+      beats: [
+        { atSec: 0, shot: "screen" },
+        { atSec: 1.2, shot: "insert", title: "Spread", stamp: "#2", images: ["assets/split-bottom.png", "assets/spread-2.png"] },
+        { atSec: 2.4, shot: "screen", videoStartSec: 4 },
+        { atSec: 3.6, shot: "face" },
+        { atSec: 4.8, shot: "screen", captionPlacement: "mid" },
+      ],
+    },
+    { id: "s-outro", kind: "card", durationSec: 3, title: "Thanks", cta: "acme.dev/start" },
+  ];
+  short.transitions = [{ after: "s-hook", type: "fade", ms: 300 }];
+  await manifest.save(dir, short, { name: "shorts.json" });
+
+  const shortCheck = manifest.validate(short);
+  if (!shortCheck.ok) throw new Error(`shorts manifest is invalid:\n  - ${shortCheck.errors.join("\n  - ")}`);
+
+  const vertical = await runRenderPass({
+    label: "vertical short",
+    manifestName: "shorts.json",
+    outName: "selftest-short.mp4",
+    expectW: 540, expectH: 960,
+    expectedSec: expectedRuntime(short),
+  });
+
   if (!keep) {
-    // Keep the rendered video but drop the scaffolded node_modules, which is large.
+    // Keep the rendered videos but drop the scaffolded node_modules, which is large.
     await rm(path.join(dir, "remotion", "node_modules"), { recursive: true, force: true }).catch(() => {});
   }
 
+  const passes = [landscape, vertical];
+  const ok = passes.every((p) => p.ok);
   report(
     ok
-      ? `  PASS — rendered ${fmtDuration(meta.duration)} at ${meta.width}x${meta.height}\n  ${out}`
+      ? passes.map((p) => `  PASS — ${p.label}: ${fmtDuration(p.actualSec)} at ${p.width}x${p.height}\n  ${p.video}`).join("\n")
       : `  FAIL — see warnings above`,
-    {
-      ok,
-      video: out,
-      expectedSec: expected,
-      actualSec: meta.duration,
-      driftSec: drift,
-      width: meta.width,
-      height: meta.height,
-      project: dir,
-    }
+    { ok, passes, project: dir }
   );
   if (!ok) process.exit(1);
 });

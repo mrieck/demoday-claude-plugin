@@ -2,8 +2,8 @@
 /**
  * Quality and safety pass over a finished (or in-progress) demo project.
  *
- *   node scripts/qa.mjs --project demo               # frames + checks
- *   node scripts/qa.mjs --project demo --video out/demo.mp4
+ *   node scripts/qa.mjs --project demo/<slug>               # frames + checks
+ *   node scripts/qa.mjs --project demo/<slug> --video out/demo.mp4
  *
  * Does three things:
  *
@@ -20,12 +20,14 @@
 import path from "node:path";
 import { readFile, readdir } from "node:fs/promises";
 import { existsSync } from "node:fs";
+import { spawnSync } from "node:child_process";
 import { parseArgs } from "./lib/args.mjs";
 import * as manifest from "./lib/manifest.mjs";
+import { STYLES } from "./lib/styles.mjs";
 import { probe, extractFrames } from "./lib/ff.mjs";
 import { report, info, warn, main, fmtDuration } from "./lib/log.mjs";
 
-const USAGE = "qa.mjs --project <dir> [--video <file>] [--fps 0.5] [--skip-frames]";
+const USAGE = "qa.mjs --project <dir> [--manifest <file>] [--video <file>] [--fps 0.5] [--skip-frames]";
 
 /**
  * Credential shapes worth shouting about. Deliberately conservative — a false
@@ -62,7 +64,7 @@ function scanText(text, where, findings) {
 await main(async () => {
   const args = parseArgs(process.argv.slice(2));
   const projectDir = manifest.resolveProjectDir(args.project);
-  const m = await manifest.load(projectDir);
+  const m = await manifest.load(projectDir, { name: args.manifest || manifest.MANIFEST_NAME });
 
   const issues = [];
   const secrets = [];
@@ -137,6 +139,47 @@ await main(async () => {
     info(`  no rendered video at ${videoArg} yet — skipping frame extraction`);
   }
 
+  // ---- pacing (styles with a shot-length target) ---------------------------
+  // Measured with scenedetect (PySceneDetect) when available: fast-cut styles
+  // live or die on rhythm, and "the render succeeded" says nothing about it.
+  // Warning-only — adaptive detection over-counts on pan-heavy footage.
+  let pacing = null;
+  const style = m.style ? STYLES[m.style] : null;
+  if (style?.targetShotSec && existsSync(videoArg)) {
+    const probeTool = spawnSync("scenedetect", ["version"], { encoding: "utf8" });
+    if (probeTool.error || probeTool.status !== 0) {
+      info("  scenedetect not on PATH — skipping the pacing check (pipx install scenedetect[opencv])");
+    } else {
+      const qaDir = path.join(projectDir, "qa");
+      const run = spawnSync(
+        "scenedetect",
+        ["-i", videoArg, "detect-adaptive", "list-scenes", "-o", qaDir, "-f", "pacing.csv", "-q"],
+        { encoding: "utf8" }
+      );
+      const csvFile = path.join(qaDir, "pacing.csv");
+      if (run.status === 0 && existsSync(csvFile)) {
+        const rows = (await readFile(csvFile, "utf8")).split("\n").filter((l) => /^\d+,/.test(l));
+        const shots = rows.length;
+        const meta = await probe(videoArg).catch(() => null);
+        if (shots && meta?.duration) {
+          const avgShotSec = meta.duration / shots;
+          const [min, max] = style.targetShotSec;
+          pacing = { shots, avgShotSec: Number(avgShotSec.toFixed(2)), target: style.targetShotSec };
+          if (avgShotSec < min || avgShotSec > max) {
+            warn(
+              `pacing: ${shots} shots, ${avgShotSec.toFixed(2)}s average — the "${m.style}" style targets ` +
+              `${min}-${max}s. ${avgShotSec > max ? "Add beats or tighten scenes." : "That is faster than readable."}`
+            );
+          } else {
+            info(`  pacing: ${shots} shots, ${avgShotSec.toFixed(2)}s average — inside the ${min}-${max}s target`);
+          }
+        }
+      } else {
+        info("  scenedetect run failed — skipping the pacing check");
+      }
+    }
+  }
+
   // ---- report --------------------------------------------------------------
   for (const s of secrets) warn(`possible ${s.kind} in ${s.where} (${s.sample})`);
   for (const i of issues) warn(i);
@@ -160,6 +203,7 @@ await main(async () => {
     secrets,
     frames,
     framesDir,
+    pacing,
     video: existsSync(videoArg) ? videoArg : null,
   });
 });

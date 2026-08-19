@@ -3,10 +3,10 @@
  * Generate or iteratively edit a still image — the cheap half of every
  * generated shot.
  *
- *   node scripts/gen/still.mjs --project demo --out assets/net.png \
+ *   node scripts/gen/still.mjs --project demo/<slug> --out assets/net.png \
  *     --prompt "wide shot on the deck of a trawler at golden hour…"
  *
- *   node scripts/gen/still.mjs --project demo --out assets/net-v2.png \
+ *   node scripts/gen/still.mjs --project demo/<slug> --out assets/net-v2.png \
  *     --edit "give each creature a soft contact shadow on the wet deck" \
  *     --from assets/net.png --ref assets/presenter.png
  *
@@ -33,7 +33,7 @@ import { IMAGE, IMAGE_EDIT, resolve } from "../lib/models.mjs";
 import { report, info, main } from "../lib/log.mjs";
 
 const USAGE =
-  "still.mjs --project <dir> --out <file.png> " +
+  "still.mjs --project <dir> [--manifest <file>] --out <file.png> " +
   '(--prompt "…" [--aspect 16:9] | --edit "…" --from <image> [--ref <image>]…) ' +
   "[--scene <id>] [--character] [--model nano-banana-pro] [--force]";
 
@@ -41,6 +41,7 @@ await main(async () => {
   const args = parseArgs(process.argv.slice(2), { multi: ["ref"] });
   const force = boolArg(args.force, false);
   const projectDir = manifest.resolveProjectDir(args.project);
+  const name = args.manifest || manifest.MANIFEST_NAME;
   const outAbs = manifest.resolveIn(projectDir, requireArg(args, "out", USAGE));
   await mkdir(path.dirname(outAbs), { recursive: true });
 
@@ -77,7 +78,15 @@ await main(async () => {
     );
   } else {
     const prompt = requireArg(args, "prompt", USAGE);
-    const aspect = args.aspect || "16:9";
+    // Default the aspect to the manifest's format, so a shorts manifest gets
+    // vertical stills without every call spelling out --aspect. One-off use
+    // (no manifest on disk) keeps the old 16:9 default.
+    let aspect = args.aspect;
+    if (!aspect) {
+      aspect = await manifest.load(projectDir, { name })
+        .then((m) => manifest.aspectOf(m.format))
+        .catch(() => "16:9");
+    }
     const spec = resolve(IMAGE, modelName);
     info(`  generating via ${spec.endpoint} (${aspect})`);
     result = await cache.memo(
@@ -109,7 +118,7 @@ await main(async () => {
         (m.presenter ||= {}).characterImage = rel;
         attached.push("presenter.characterImage");
       }
-    });
+    }, { name });
   }
 
   report(

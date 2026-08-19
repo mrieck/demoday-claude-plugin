@@ -11,6 +11,14 @@ export const defaultTheme = {
   font: "Inter, -apple-system, system-ui, sans-serif",
 };
 
+/**
+ * Type sizes in the template were tuned against a 1080px short side. This factor
+ * keeps them honest at other resolutions: exactly 1 for both 1920x1080 and
+ * 1080x1920 (so existing landscape renders are pixel-identical), smaller for the
+ * low-res selftest fixtures.
+ */
+export const typeScale = (width, height) => Math.min(width, height) / 1080;
+
 export function themeFrom(brand = {}) {
   return {
     ...defaultTheme,

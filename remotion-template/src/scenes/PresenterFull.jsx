@@ -1,6 +1,7 @@
 import React from "react";
 import { AbsoluteFill, OffthreadVideo, staticFile, useCurrentFrame, useVideoConfig, interpolate } from "remotion";
 import { LowerThird } from "../components/LowerThird.jsx";
+import { typeScale } from "../theme.js";
 
 /**
  * Full-frame presenter — the intro, the outro, and any beat where a person talking
@@ -13,7 +14,7 @@ import { LowerThird } from "../components/LowerThird.jsx";
  */
 export const PresenterFull = ({ scene, theme }) => {
   const frame = useCurrentFrame();
-  const { fps, durationInFrames } = useVideoConfig();
+  const { fps, durationInFrames, width, height } = useVideoConfig();
 
   // A slow push-in keeps a talking head from feeling like a frozen photo.
   const scale = interpolate(frame, [0, durationInFrames], [1.0, 1.05], {
@@ -48,7 +49,7 @@ export const PresenterFull = ({ scene, theme }) => {
             // roughly 60px tall. At 12% the two collided on any captioned outro.
             bottom: "24%",
             textAlign: "center",
-            font: `700 46px ${theme.font}`,
+            font: `700 ${Math.round(46 * typeScale(width, height))}px ${theme.font}`,
             color: theme.text,
             textShadow: "0 4px 18px rgba(0,0,0,.6)",
             opacity: interpolate(frame, [fps * 0.5, fps * 1.2], [0, 1], {

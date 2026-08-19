@@ -10,3 +10,6 @@ node_modules/
 # Build / render output
 remotion-template/out/
 *.mp4
+
+# Social Cue MCP runtime state/logs — local only
+.socialdiscovery/

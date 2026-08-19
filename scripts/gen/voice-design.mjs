@@ -2,11 +2,11 @@
 /**
  * Character voice design — describe a voice in prose, get a reusable voice_id.
  *
- *   node scripts/gen/voice-design.mjs --project demo --describe "Weathered New England
+ *   node scripts/gen/voice-design.mjs --project demo/<slug> --describe "Weathered New England
  *     lobster-boat captain, gravelly, thick coastal Maine accent" [--name "Captain"]
- *   node scripts/gen/voice-design.mjs --project demo --describe "..." --audition
- *   node scripts/gen/voice-design.mjs --project demo --pick 2
- *   node scripts/gen/voice-design.mjs --project demo --use <voice_id>
+ *   node scripts/gen/voice-design.mjs --project demo/<slug> --describe "..." --audition
+ *   node scripts/gen/voice-design.mjs --project demo/<slug> --pick 2
+ *   node scripts/gen/voice-design.mjs --project demo/<slug> --use <voice_id>
  *   node scripts/gen/voice-design.mjs --list
  *   node scripts/gen/voice-design.mjs --delete <voice_id> [--force]
  *

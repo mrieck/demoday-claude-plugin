@@ -4,8 +4,8 @@
  * real program (claude, or any CLI), then retimes the take to the narration.
  *
  *   node scripts/capture/cli-perform.mjs \
- *     --actions demo/actions/feature-1.json \
- *     --out demo/clips/feature-1.mp4 \
+ *     --actions demo/<slug>/actions/feature-1.json \
+ *     --out demo/<slug>/clips/feature-1.mp4 \
  *     --cwd /path/to/demo-project \
  *     --target-duration 14.0
  *

@@ -153,7 +153,7 @@ export function resolvePins(script, timestamps) {
 
   const words = timestamps.map((t) => ({
     text: String(t.text ?? t.word ?? "").trim().toLowerCase().replace(/[^a-z0-9']/g, ""),
-    startMs: Math.round(Number(t.start ?? t.start_time ?? t.startTime ?? 0) * 1000),
+    startMs: Math.round(Number(t.startSec ?? t.start ?? t.start_time ?? t.startTime ?? 0) * 1000),
   })).filter((w) => w.text);
 
   for (const step of script.steps || []) {

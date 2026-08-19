@@ -13,11 +13,47 @@
 import { readFile, writeFile, mkdir, rename, open, unlink, stat } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import path from "node:path";
+import { STYLES, STYLE_NAMES } from "./styles.mjs";
 
 export const MANIFEST_NAME = "demo.json";
 
 /** Scene kinds the renderer knows how to draw. */
 export const SCENE_KINDS = ["presenter", "demo", "broll", "card"];
+
+/**
+ * How a demo (screen-capture) scene is fitted when the composition aspect differs
+ * from the capture aspect — the central question of a vertical Short built from a
+ * landscape recording. "split" (the house style, and the auto-default on a
+ * mismatch) puts the demo in the top zone with a content slot below; "pan"
+ * follows the click log with a sliding full-frame window; "card" letterboxes the
+ * full UI into a styled card; "cover" center-crops (the original behavior, still
+ * the default when the aspects roughly match).
+ */
+export const FRAMINGS = ["pan", "card", "cover", "split"];
+
+/** What a split scene's bottom zone shows. Absent bottom means "captions". */
+export const SPLIT_BOTTOM_KINDS = ["presenter", "image", "captions", "bullets"];
+
+/**
+ * Shot types a beat can cut to. Beats let ONE narrated scene cut its visuals
+ * every second or two — the grammar of fast social video — while the voice
+ * flows continuously: "face" is the full-bleed talking presenter, "screen" the
+ * scene's capture, "split" the top/bottom layout, "insert" a full-frame image
+ * or typographic card, "card" the classic motion card.
+ */
+export const BEAT_SHOTS = ["face", "screen", "split", "insert", "card"];
+
+/** Caption renderings: "clean" pill, "shorts" karaoke, "boxed" phrase cards. */
+export const CAPTION_STYLES = ["clean", "shorts", "boxed"];
+export const CAPTION_PLACEMENTS = ["seam", "mid", "low"];
+
+/** Nearest generation-model aspect label for a format. */
+export function aspectOf(format = {}) {
+  const { width = 1920, height = 1080 } = format;
+  const r = width / height;
+  const candidates = [["16:9", 16 / 9], ["9:16", 9 / 16], ["1:1", 1]];
+  return candidates.reduce((best, c) => (Math.abs(c[1] - r) < Math.abs(best[1] - r) ? c : best))[0];
+}
 
 /** Presenter modes: no face at all / face only outside the demo / face always on screen. */
 export const PRESENTER_MODES = ["none", "hybrid", "always"];
@@ -78,8 +114,13 @@ export function resolveProjectDir(explicit) {
   return path.join(cwd, "demo");
 }
 
-export function manifestPath(projectDir) {
-  return path.join(projectDir, MANIFEST_NAME);
+/**
+ * `name` selects a sibling manifest in the same project dir (e.g. "shorts.json"
+ * for a vertical cut that shares the project's clips and .cache.json). Artifacts
+ * stay project-relative either way, so both manifests can reference the same files.
+ */
+export function manifestPath(projectDir, name = MANIFEST_NAME) {
+  return path.join(projectDir, name || MANIFEST_NAME);
 }
 
 /** Absolute path for a manifest-relative path. */
@@ -94,10 +135,10 @@ export function relativeIn(projectDir, abs) {
   return path.relative(projectDir, path.resolve(abs));
 }
 
-export async function load(projectDir) {
-  const file = manifestPath(projectDir);
+export async function load(projectDir, { name = MANIFEST_NAME } = {}) {
+  const file = manifestPath(projectDir, name);
   if (!existsSync(file)) {
-    throw new Error(`No ${MANIFEST_NAME} at ${file} — run the demo-video skill to create one.`);
+    throw new Error(`No ${name} at ${file} — run the demo-video skill to create one.`);
   }
   const raw = await readFile(file, "utf8");
   let parsed;
@@ -215,9 +256,9 @@ async function withLock(file, fn, { timeoutMs = 10000, staleMs = 20000 } = {}) {
  * the file. A manifest that was never load()ed (plan.mjs --init) has no base
  * and overwrites, which is what --init means.
  */
-export async function save(projectDir, manifest) {
+export async function save(projectDir, manifest, { name = MANIFEST_NAME } = {}) {
   await mkdir(projectDir, { recursive: true });
-  const file = manifestPath(projectDir);
+  const file = manifestPath(projectDir, name);
   return withLock(file, async () => {
     let toWrite = manifest;
     const base = loadedSnapshots.get(manifest);
@@ -242,10 +283,10 @@ export async function save(projectDir, manifest) {
  * Read-modify-write a manifest in one call.
  * `mutate` receives the manifest and may edit it in place or return a new one.
  */
-export async function update(projectDir, mutate) {
-  const manifest = await load(projectDir);
+export async function update(projectDir, mutate, { name = MANIFEST_NAME } = {}) {
+  const manifest = await load(projectDir, { name });
   const next = (await mutate(manifest)) || manifest;
-  await save(projectDir, next);
+  await save(projectDir, next, { name });
   return next;
 }
 
@@ -287,6 +328,20 @@ export function validate(manifest) {
   if (provider && !VOICE_PROVIDERS.includes(provider)) {
     push(errors, `voice.provider must be one of ${VOICE_PROVIDERS.join(" | ")}, got "${provider}"`);
   }
+
+  const capStyle = manifest?.captions?.style;
+  if (capStyle && !CAPTION_STYLES.includes(capStyle)) {
+    push(warnings, `captions.style "${capStyle}" is unknown — the renderer will fall back to "clean"`);
+  }
+
+  if (manifest?.style) {
+    const st = STYLES[manifest.style];
+    if (!st) {
+      push(warnings, `style "${manifest.style}" is not in the catalog (${STYLE_NAMES.join(", ")})`);
+    } else if ((st.aspect === "9:16") !== (fmt.height > fmt.width)) {
+      push(warnings, `style "${manifest.style}" is ${st.aspect} but the format is ${fmt.width}x${fmt.height}`);
+    }
+  }
   if (provider === "elevenlabs" && !manifest?.voice?.voiceId) {
     push(errors, 'voice.provider is "elevenlabs" but voice.voiceId is missing — run gen/voice-design.mjs');
   }
@@ -317,6 +372,51 @@ export function validate(manifest) {
       push(errors, `${at}: durationSec must be positive`);
     }
 
+    if (scene.framing && !FRAMINGS.includes(scene.framing)) {
+      push(errors, `${at}: framing must be one of ${FRAMINGS.join(" | ")}, got "${scene.framing}"`);
+    }
+    if (scene.aspect && !/^\d+:\d+$/.test(scene.aspect)) {
+      push(errors, `${at}: aspect must look like "9:16", got "${scene.aspect}"`);
+    }
+    if (scene.headline && scene.framing !== "card" && scene.kind !== "card") {
+      push(warnings, `${at}: headline is only drawn with framing "card"`);
+    }
+
+    if (scene.framing === "split" && scene.kind !== "demo") {
+      push(errors, `${at}: framing "split" only applies to demo scenes`);
+    }
+    if (scene.bottom && scene.framing && scene.framing !== "split") {
+      push(warnings, `${at}: bottom is only drawn with framing "split"`);
+    }
+    if (scene.splitPct != null && !(scene.splitPct >= 0.35 && scene.splitPct <= 0.75)) {
+      push(errors, `${at}: splitPct must be between 0.35 and 0.75`);
+    }
+    if (scene.topFraming && !["pan", "cover"].includes(scene.topFraming)) {
+      push(errors, `${at}: topFraming must be "pan" or "cover"`);
+    }
+    if (scene.bottom) {
+      const b = scene.bottom;
+      if (!SPLIT_BOTTOM_KINDS.includes(b.kind)) {
+        push(errors, `${at}: bottom.kind must be one of ${SPLIT_BOTTOM_KINDS.join(" | ")}, got "${b.kind}"`);
+      }
+      if (b.kind === "image" && !b.image) {
+        push(errors, `${at}: bottom.kind "image" needs bottom.image`);
+      }
+      if (b.kind === "bullets") {
+        const ok = Array.isArray(b.bullets) && b.bullets.length &&
+          b.bullets.every((x) => x?.text && (x.atSec == null || typeof x.atSec === "number"));
+        if (!ok) push(errors, `${at}: bottom.kind "bullets" needs a non-empty bullets array of { text, atSec? }`);
+      }
+      if (b.kind === "presenter") {
+        if (!scene.audio && !scene.presenterVideo) {
+          push(errors, `${at}: bottom presenter needs narration audio to animate to, or an existing presenterVideo`);
+        }
+        if (mode === "none") {
+          push(warnings, `${at}: bottom presenter while presenter.mode is "none" — it will render as captions`);
+        }
+      }
+    }
+
     if (scene.kind === "demo") {
       if (!CAPTURE_TARGETS.includes(scene.target)) {
         push(errors, `${at}: target must be one of ${CAPTURE_TARGETS.join(" | ")}`);
@@ -324,6 +424,90 @@ export function validate(manifest) {
       if (!scene.actions && !scene.video) {
         push(errors, `${at}: needs an actions file to perform, or an already-recorded video`);
       }
+    }
+
+    if (scene.beats && scene.kind !== "demo") {
+      push(errors, `${at}: beats only apply to demo scenes`);
+    }
+    if (scene.beatLayout) {
+      if (scene.beatLayout !== "anchored") {
+        push(errors, `${at}: beatLayout must be "anchored" if set, got "${scene.beatLayout}"`);
+      }
+      if (!Array.isArray(scene.beats) || !scene.beats.length) {
+        push(errors, `${at}: beatLayout needs beats — it shapes how the beat windows render`);
+      }
+      if (!scene.bottom) {
+        push(warnings, `${at}: beatLayout "anchored" without a bottom slot — it will render as plain beat cuts`);
+      }
+    }
+    if (scene.captionPlacement && !CAPTION_PLACEMENTS.includes(scene.captionPlacement)) {
+      push(errors, `${at}: captionPlacement must be one of ${CAPTION_PLACEMENTS.join(" | ")}`);
+    }
+    if (scene.beats && scene.kind === "demo") {
+      if (!Array.isArray(scene.beats) || !scene.beats.length) {
+        push(errors, `${at}: beats must be a non-empty array`);
+      } else {
+        if (scene.beats[0].atSec !== 0) push(errors, `${at}: the first beat must start at atSec 0`);
+        for (const [bi, b] of scene.beats.entries()) {
+          const bat = `${at} beats[${bi}]`;
+          if (!BEAT_SHOTS.includes(b?.shot)) {
+            push(errors, `${bat}: shot must be one of ${BEAT_SHOTS.join(" | ")}, got "${b?.shot}"`);
+          }
+          if (typeof b?.atSec !== "number" || b.atSec < 0) {
+            push(errors, `${bat}: atSec must be a non-negative number`);
+          }
+          if (bi > 0 && !(b.atSec > scene.beats[bi - 1].atSec)) {
+            push(errors, `${bat}: atSec must be strictly increasing`);
+          }
+          const windowEnd = bi < scene.beats.length - 1 ? scene.beats[bi + 1].atSec : scene.durationSec;
+          if (bi > 0 && windowEnd != null && windowEnd - b.atSec < 0.4) {
+            push(warnings, `${bat}: window is under 0.4s — faster than 2.5 cuts/sec reads as flicker`);
+          }
+          if (b.shot === "insert" && !b.image && !b.images?.length && !b.prompt && !b.title) {
+            push(errors, `${bat}: an insert beat needs an image (or images), a prompt to generate one, or a title`);
+          }
+          if (b.images != null) {
+            const ok = Array.isArray(b.images) && b.images.length >= 2 && b.images.length <= 5 &&
+              b.images.every((p) => typeof p === "string" && p);
+            if (!ok) push(errors, `${bat}: images must be 2-5 asset paths`);
+            if (b.image) push(errors, `${bat}: image and images are mutually exclusive`);
+            if (b.shot !== "insert") push(warnings, `${bat}: images only affects insert beats`);
+          }
+          if (b.captionPlacement && !CAPTION_PLACEMENTS.includes(b.captionPlacement)) {
+            push(errors, `${bat}: captionPlacement must be one of ${CAPTION_PLACEMENTS.join(" | ")}`);
+          }
+          if (b.framing != null) {
+            if (!["pan", "cover"].includes(b.framing)) {
+              push(errors, `${bat}: framing must be "pan" or "cover"`);
+            }
+            if (!["screen", "split"].includes(b.shot)) {
+              push(warnings, `${bat}: framing only affects screen/split beats`);
+            }
+          }
+          if (b.videoStartSec != null) {
+            if (!["screen", "split"].includes(b.shot)) {
+              push(warnings, `${bat}: videoStartSec only affects screen/split beats`);
+            }
+            if (!(b.videoStartSec >= 0)) push(errors, `${bat}: videoStartSec must be >= 0`);
+          }
+        }
+        if (scene.durationSec != null) {
+          const last = scene.beats[scene.beats.length - 1];
+          if (last.atSec >= scene.durationSec) {
+            push(errors, `${at}: the last beat starts at ${last.atSec}s, past the scene's ${scene.durationSec}s`);
+          } else if (last.atSec > scene.durationSec - 0.5) {
+            push(warnings, `${at}: the last beat has under 0.5s of screen time`);
+          }
+        }
+      }
+    }
+    if (scene.captionEmphasis) {
+      const ok = Array.isArray(scene.captionEmphasis) &&
+        scene.captionEmphasis.every((e) => e?.match && ["neg", "pos"].includes(e?.tone));
+      if (!ok) push(errors, `${at}: captionEmphasis must be [{ match, tone: "neg" | "pos" }]`);
+    }
+    if (scene.captionsStyle && !CAPTION_STYLES.includes(scene.captionsStyle)) {
+      push(warnings, `${at}: captionsStyle "${scene.captionsStyle}" is unknown — the renderer will fall back`);
     }
     if (scene.kind === "broll" && !scene.prompt && !scene.video) {
       push(errors, `${at}: needs a prompt to generate from, or an existing video`);
@@ -354,8 +538,17 @@ export function pending(projectDir, manifest) {
     const has = (rel) => rel && existsSync(resolveIn(projectDir, rel));
 
     if (scene.narration && !has(scene.audio)) needs.push("audio");
-    if (scene.kind === "demo" && !has(scene.actions)) needs.push("actions");
+    // A demo scene reusing an already-recorded clip (a Short cut from the main
+    // demo) declares no actions file at all — that is complete, not pending.
+    const missingActions = scene.actions ? !has(scene.actions) : !has(scene.video);
+    if (scene.kind === "demo" && missingActions) needs.push("actions");
     if (scene.kind !== "card" && !has(scene.video)) needs.push("video");
+    const wantsPresenterClip =
+      scene.bottom?.kind === "presenter" ||
+      (scene.beats || []).some((b) => b.shot === "face" || (b.shot === "split" && scene.bottom?.kind === "presenter"));
+    if (wantsPresenterClip && scene.audio && !has(scene.presenterVideo)) {
+      needs.push("presenterVideo");
+    }
     if (needs.length) out.push({ sceneId: scene.id, kind: scene.kind, needs });
   }
   return out;

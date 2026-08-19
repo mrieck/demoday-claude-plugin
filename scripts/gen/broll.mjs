@@ -3,8 +3,8 @@
  * B-roll cutscenes: the shots between demo segments where a person is using the
  * product, a team is reacting, an office establishes context.
  *
- *   node scripts/gen/broll.mjs --project demo --all
- *   node scripts/gen/broll.mjs --project demo --scene broll-1 --model veo-3.1
+ *   node scripts/gen/broll.mjs --project demo/<slug> --all
+ *   node scripts/gen/broll.mjs --project demo/<slug> --scene broll-1 --model veo-3.1
  *
  * Two-stage by default: generate a still, then animate it. Image-to-video gives far
  * more control over who is in the shot and what it looks like than text-to-video,
@@ -27,7 +27,8 @@ import { IMAGE, VIDEO, VIDEO_LADDER, resolve } from "../lib/models.mjs";
 import { report, info, warn, main, fmtDuration } from "../lib/log.mjs";
 
 const USAGE =
-  "broll.mjs --project <dir> (--all | --scene <id>) [--model grok-imagine|sora-2|veo-3.1|...] [--force]";
+  "broll.mjs --project <dir> [--manifest <file>] (--all | --scene <id>) " +
+  "[--model grok-imagine|sora-2|veo-3.1|...] [--aspect 9:16] [--force]";
 
 /** Generate the reference still for a shot. */
 async function makeStill({ projectDir, prompt, outFile, model = "nano-banana-pro", aspect = "16:9", force }) {
@@ -144,7 +145,8 @@ await main(async () => {
   const args = parseArgs(process.argv.slice(2));
   const force = boolArg(args.force, false);
   const projectDir = manifest.resolveProjectDir(args.project);
-  const m = await manifest.load(projectDir);
+  const name = args.manifest || manifest.MANIFEST_NAME;
+  const m = await manifest.load(projectDir, { name });
 
   const scenes = args.all
     ? m.timeline.filter((s) => s.kind === "broll")
@@ -171,9 +173,13 @@ await main(async () => {
     // A caller can supply their own still (a real product photo, a brand asset).
     let still = scene.still ? manifest.resolveIn(projectDir, scene.still) : null;
     if (!still && !boolArg(args["text-to-video"], false)) {
+      // The still carries the geometry: i2v models inherit its aspect, so a
+      // vertical manifest gets vertical b-roll with no per-model plumbing.
       const s = await makeStill({
         projectDir, prompt: scene.prompt, outFile: stillAbs,
-        model: args.image_model || "nano-banana-pro", force,
+        model: args.image_model || "nano-banana-pro",
+        aspect: args.aspect || scene.aspect || manifest.aspectOf(m.format),
+        force,
       });
       still = s.path;
       scene.still = manifest.relativeIn(projectDir, s.path);
@@ -194,6 +200,6 @@ await main(async () => {
     out.push({ scene: scene.id, video: v.path, model: v.model, cached: v.cached, durationSec: meta?.duration ?? null });
   }
 
-  await manifest.save(projectDir, m);
+  await manifest.save(projectDir, m, { name });
   report(`  b-roll: ${out.length} shot(s) ready`, { ok: true, scenes: out });
 });

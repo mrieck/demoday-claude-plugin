@@ -6,10 +6,10 @@
  * because nothing pauses to think.
  *
  *   node scripts/capture/web-perform.mjs \
- *     --actions demo/actions/create.json \
- *     --out demo/clips/create.mp4 \
+ *     --actions demo/<slug>/actions/create.json \
+ *     --out demo/<slug>/clips/create.mp4 \
  *     --target-duration 12.1 \
- *     --timestamps demo/audio/create.words.json
+ *     --timestamps demo/<slug>/audio/create.words.json
  *
  * --target-duration paces the replay to the narration by stretching dwell, so the
  * clip lands on the voiceover instead of needing to be cut to fit afterwards.

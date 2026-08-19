@@ -2,8 +2,8 @@
 /**
  * Scaffold the Remotion app if needed, build props, and render the final video.
  *
- *   node scripts/render/render.mjs --project demo
- *   node scripts/render/render.mjs --project demo --studio    # open the editor instead
+ *   node scripts/render/render.mjs --project demo/<slug>
+ *   node scripts/render/render.mjs --project demo/<slug> --studio    # open the editor instead
  *
  * The Remotion app is COPIED into <project>/remotion rather than run from the
  * plugin, so the user can open it, change a transition, restyle a card, and keep
@@ -27,7 +27,9 @@ const PLUGIN_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "
 const TEMPLATE = path.join(PLUGIN_ROOT, "remotion-template");
 const ENTRY = "src/index.jsx";
 
-const USAGE = "render.mjs --project <dir> [--out final.mp4] [--studio] [--scene <id>] [--quality 18]";
+const USAGE =
+  "render.mjs --project <dir> [--manifest <file>] [--out final.mp4] [--studio] " +
+  "[--scene <id>] [--quality 18] [--sync-template]";
 
 function run(cmd, args, cwd) {
   return new Promise((resolve, reject) => {
@@ -60,14 +62,24 @@ async function scaffold(projectDir) {
 await main(async () => {
   const args = parseArgs(process.argv.slice(2));
   const projectDir = manifest.resolveProjectDir(args.project);
-  if (!existsSync(manifest.manifestPath(projectDir))) {
-    throw new Error(`No demo.json in ${projectDir} — nothing to render.`);
+  const name = args.manifest || manifest.MANIFEST_NAME;
+  if (!existsSync(manifest.manifestPath(projectDir, name))) {
+    throw new Error(`No ${name} in ${projectDir} — nothing to render.`);
   }
 
   const appDir = await scaffold(projectDir);
 
+  // The template is copied once and then owned by the user, so template fixes
+  // in the plugin never reach an existing project on their own. --sync-template
+  // is the explicit opt-in: it OVERWRITES <project>/remotion/src with the
+  // plugin's current template (props.json is rewritten every run anyway).
+  if (boolArg(args["sync-template"], false)) {
+    warn("  --sync-template: overwriting the project's remotion/src with the plugin template — local Remotion edits are lost.");
+    await cp(path.join(TEMPLATE, "src"), path.join(appDir, "src"), { recursive: true });
+  }
+
   // Props are rebuilt every time so the render always reflects the manifest.
-  const props = await buildProps(projectDir, { lenient: boolArg(args.lenient, false) });
+  const props = await buildProps(projectDir, { lenient: boolArg(args.lenient, false), name });
   const propsFile = path.join(appDir, "src", "props.json");
   await writeFile(propsFile, `${JSON.stringify(props, null, 2)}\n`);
 

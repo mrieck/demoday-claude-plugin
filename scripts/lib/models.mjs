@@ -199,12 +199,20 @@ export function estimateCost(m) {
   if (presenterMode !== "none") {
     const engine = AVATAR[Object.keys(AVATAR).find((k) => AVATAR[k].endpoint === m.presenter?.engine)] ||
       AVATAR.infinitalk;
-    const presenterSec = (m.timeline || [])
-      .filter((s) => s.kind === "presenter")
-      .reduce((sum, s) => sum + (s.durationSec || 8), 0);
+    // Full presenter scenes plus demo scenes that need a talking clip (split
+    // bottom zone or face beats) — all bill avatar-seconds.
+    const presenterScenes = (m.timeline || []).filter(
+      (s) =>
+        s.kind === "presenter" ||
+        (s.kind === "demo" &&
+          (s.bottom?.kind === "presenter" || (s.beats || []).some((b) => b.shot === "face")))
+    );
+    const presenterSec = presenterScenes.reduce((sum, s) => sum + (s.durationSec || 8), 0);
+    const bottomCount = presenterScenes.filter((s) => s.kind === "demo").length;
     if (presenterSec) {
       const usd = presenterSec * engine.approxUsdPerSecond;
-      lines.push({ item: "presenter", detail: `${Math.round(presenterSec)}s`, usd });
+      const detail = `${Math.round(presenterSec)}s${bottomCount ? ` (incl. ${bottomCount} split bottom)` : ""}`;
+      lines.push({ item: "presenter", detail, usd });
       total += usd;
     }
     if (!m.presenter?.characterImage) {
@@ -219,6 +227,16 @@ export function estimateCost(m) {
   if (brollSec) {
     const usd = brollSec * 0.1;
     lines.push({ item: "b-roll", detail: `${Math.round(brollSec)}s`, usd });
+    total += usd;
+  }
+
+  // Insert beats with a prompt get a generated still; ones with an image are free.
+  const insertStills = (m.timeline || [])
+    .flatMap((s) => s.beats || [])
+    .filter((b) => b.shot === "insert" && b.prompt && !b.image).length;
+  if (insertStills) {
+    const usd = insertStills * 0.05;
+    lines.push({ item: "insert stills", detail: `${insertStills} image(s)`, usd });
     total += usd;
   }
 

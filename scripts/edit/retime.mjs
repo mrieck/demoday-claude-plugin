@@ -5,10 +5,10 @@
  * narration, whose length was fixed first.
  *
  *   node scripts/edit/retime.mjs \
- *     --in demo/clips/feature-1.raw.mp4 \
- *     --out demo/clips/feature-1.mp4 \
+ *     --in demo/<slug>/clips/feature-1.raw.mp4 \
+ *     --out demo/<slug>/clips/feature-1.mp4 \
  *     --target-duration 14.0 \
- *     --events demo/clips/feature-1.events.json
+ *     --events demo/<slug>/clips/feature-1.events.json
  *
  * Standalone on purpose: re-recording the narration only costs a re-retime of
  * the kept raw file, not a new live take (which spends real API usage when the

@@ -5,7 +5,9 @@ import { fade } from "@remotion/transitions/fade";
 import { wipe } from "@remotion/transitions/wipe";
 import { slide } from "@remotion/transitions/slide";
 
-import { DemoClip } from "./scenes/DemoClip.jsx";
+import { DemoClip, framingFor } from "./scenes/DemoClip.jsx";
+import { SplitScene, SPLIT_DEFAULT_PCT, resolveBottom } from "./scenes/SplitScene.jsx";
+import { BeatScene } from "./scenes/BeatScene.jsx";
 import { PresenterFull } from "./scenes/PresenterFull.jsx";
 import { PresenterPip } from "./scenes/PresenterPip.jsx";
 import { BRollClip } from "./scenes/BRollClip.jsx";
@@ -35,9 +37,11 @@ export function totalFrames(props, fps) {
   return Math.max(1, sum - overlap);
 }
 
-const SceneBody = ({ scene, theme, fps, presenterMode, pipVideo }) => {
+const SceneBody = ({ scene, theme, fps, presenterMode, pipVideo, split }) => {
   switch (scene.kind) {
     case "demo":
+      if (scene.beats?.length) return <BeatScene scene={scene} theme={theme} fps={fps} presenterMode={presenterMode} />;
+      if (split) return <SplitScene scene={scene} theme={theme} fps={fps} presenterMode={presenterMode} />;
       return (
         <>
           <DemoClip scene={scene} theme={theme} fps={fps} />
@@ -61,7 +65,7 @@ const SceneBody = ({ scene, theme, fps, presenterMode, pipVideo }) => {
 };
 
 export const DemoVideo = (props) => {
-  const { fps } = useVideoConfig();
+  const { fps, width, height } = useVideoConfig();
   const theme = themeFrom(props.brand);
   const scenes = props.timeline || [];
   const presenterMode = props.presenter?.mode || "hybrid";
@@ -95,6 +99,7 @@ export const DemoVideo = (props) => {
                 fps={fps}
                 presenterMode={presenterMode}
                 pipVideo={props.presenter?.pipVideo}
+                split={scene.kind === "demo" && framingFor(scene, width, height) === "split"}
               />
             </TransitionSeries.Sequence>,
           ];
@@ -115,14 +120,41 @@ export const DemoVideo = (props) => {
         })}
       </TransitionSeries>
 
-      {audioTrack.map(({ scene, from, frames }) => (
-        <Sequence key={`a-${scene.id}`} from={from} durationInFrames={frames}>
-          <Audio src={staticFile(scene.audio)} />
-          {props.captions?.enabled !== false && scene.wordTimings?.length ? (
-            <Captions words={scene.wordTimings} theme={theme} />
-          ) : null}
-        </Sequence>
-      ))}
+      {audioTrack.map(({ scene, from, frames }) => {
+        // Captions move with the split layout: centered in the bottom zone when
+        // that zone is theirs, tucked under the seam when other content owns it.
+        // Beat scenes: boxed captions place themselves per beat (seam over pane
+        // shots in an anchored scene, low over face punch-ins, mid elsewhere);
+        // shorts-style karaoke rides the seam when the scene is anchored.
+        const isBeat = scene.kind === "demo" && !!scene.beats?.length;
+        const anchored = isBeat && scene.beatLayout === "anchored" &&
+          resolveBottom(scene, presenterMode).kind !== "captions";
+        const isSplit = scene.kind === "demo" &&
+          !isBeat && framingFor(scene, width, height) === "split";
+        const placement = isBeat
+          ? (anchored ? "seam" : "default")
+          : !isSplit
+            ? "default"
+            : resolveBottom(scene, presenterMode).kind === "captions" ? "bottom" : "seam";
+        return (
+          <Sequence key={`a-${scene.id}`} from={from} durationInFrames={frames}>
+            <Audio src={staticFile(scene.audio)} />
+            {props.captions?.enabled !== false && scene.wordTimings?.length ? (
+              <Captions
+                words={scene.wordTimings}
+                theme={theme}
+                style={scene.captionsStyle || props.captions?.style}
+                placement={placement}
+                splitPct={scene.splitPct ?? SPLIT_DEFAULT_PCT}
+                emphasis={scene.captionEmphasis}
+                beats={scene.beats}
+                anchored={anchored}
+                scenePlacement={scene.captionPlacement}
+              />
+            ) : null}
+          </Sequence>
+        );
+      })}
 
       {props.music?.enabled && props.music.bed ? (
         <Audio
