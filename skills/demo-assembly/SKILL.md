@@ -72,6 +72,17 @@ cover the logo).
 
 Captions only exist for scenes that have a `.words.json`.
 
+## Watermark
+
+A top-level `"watermark": { "text": "@handle", "image": "assets/logo.png",
+"position": "top-left", "opacity": 0.55, "size": 34, "color": "#fff" }` block
+draws a persistent channel handle over every scene (text, image, or both — all
+fields optional except one of text/image). Positions: `top-left` (default),
+`top-center`, `top-right`, `bottom-left`, `bottom-right`; the insets keep it
+clear of the like/share rail and caption strip on vertical platforms. A scene
+opts out with `"watermark": false` (e.g. a CTA card whose logo it would sit on);
+the mark fades over 0.25s at the edges of each run instead of popping.
+
 ## Diagnosing a bad render
 
 | Symptom | Cause |

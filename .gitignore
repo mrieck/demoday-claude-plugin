@@ -11,5 +11,26 @@ node_modules/
 remotion-template/out/
 *.mp4
 
+# PERSONAL-MEDIA GUARD — this repo is PUBLIC on GitHub. Mark's photos, AI-avatar
+# portraits, voice samples and demo footage live in the PRIVATE parent repo
+# (Bitbucket) and must never land here. Ignore every media type and the dirs
+# they'd arrive in; the only sanctioned images are the DemoDay logos in docs/,
+# which the trailing exception re-allows. If a future doc image is needed, put
+# it in docs/ — never loosen the global patterns.
+characters/
+demo/
+assets/
+*.png
+*.jpg
+*.jpeg
+*.webp
+*.gif
+*.mp3
+*.wav
+*.m4a
+*.mov
+*.webm
+!docs/*.png
+
 # Social Cue MCP runtime state/logs — local only
 .socialdiscovery/

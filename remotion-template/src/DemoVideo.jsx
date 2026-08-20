@@ -13,6 +13,7 @@ import { PresenterPip } from "./scenes/PresenterPip.jsx";
 import { BRollClip } from "./scenes/BRollClip.jsx";
 import { Card } from "./scenes/Card.jsx";
 import { Captions } from "./components/Captions.jsx";
+import { Watermark } from "./components/Watermark.jsx";
 import { themeFrom } from "./theme.js";
 
 const PRESENTATIONS = { fade, wipe, slide };
@@ -76,15 +77,34 @@ export const DemoVideo = (props) => {
   // talking over each other is instantly noticeable.
   let cursor = 0;
   const audioTrack = [];
+  const sceneRanges = [];
   for (const [i, scene] of scenes.entries()) {
     const frames = secToFrames(scene.durationSec || 0, fps);
     if (scene.audio) audioTrack.push({ scene, from: cursor, frames });
+    sceneRanges.push({ scene, from: cursor, frames });
     cursor += frames;
     const t = transitionsById.get(scene.id);
     if (t && i < scenes.length - 1) cursor -= secToFrames((t.ms || 400) / 1000, fps);
   }
 
   const total = totalFrames(props, fps);
+
+  // The watermark covers contiguous runs of scenes that have not opted out with
+  // `watermark: false` (a CTA card whose logo it would sit on, say). Runs are
+  // computed on the same absolute timeline as the audio, and adjacent scenes
+  // overlap by their transition, so merging on overlap keeps the mark steady
+  // through a fade instead of popping at the seam.
+  const wm = props.watermark;
+  const wmRuns = [];
+  if (wm && (wm.text || wm.image)) {
+    for (const { scene, from, frames } of sceneRanges) {
+      if (scene.watermark === false) continue;
+      const to = Math.min(from + frames, total);
+      const last = wmRuns[wmRuns.length - 1];
+      if (last && from <= last.to) last.to = Math.max(last.to, to);
+      else wmRuns.push({ from, to });
+    }
+  }
 
   return (
     <AbsoluteFill style={{ backgroundColor: theme.bg }}>
@@ -170,6 +190,12 @@ export const DemoVideo = (props) => {
           }}
         />
       ) : null}
+
+      {wmRuns.map((r) => (
+        <Sequence key={`wm-${r.from}`} from={r.from} durationInFrames={r.to - r.from}>
+          <Watermark watermark={wm} theme={theme} fps={fps} runFrames={r.to - r.from} />
+        </Sequence>
+      ))}
 
       {/* Fade the very end to black so the video does not stop on a hard cut. */}
       <Sequence from={Math.max(0, total - secToFrames(0.5, fps))}>

@@ -222,6 +222,10 @@ export async function buildProps(projectDir, { lenient = false, name = manifest.
     }
   }
 
+  if (m.watermark?.image && !existsSync(manifest.resolveIn(projectDir, m.watermark.image))) {
+    problems.push(`watermark image not found at ${m.watermark.image}`);
+  }
+
   if (problems.length) {
     const msg = `Cannot render yet:\n  - ${problems.join("\n  - ")}`;
     if (!lenient) throw new Error(msg);
@@ -235,6 +239,7 @@ export async function buildProps(projectDir, { lenient = false, name = manifest.
     presenter: m.presenter,
     music: m.music,
     captions: m.captions,
+    watermark: m.watermark,
     transitions: m.transitions || [],
     timeline,
   };

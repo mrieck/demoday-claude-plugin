@@ -68,6 +68,11 @@ export const CAPTURE_TARGETS = ["web", "mac", "ios", "cli"];
  */
 export const VOICE_PROVIDERS = ["fal", "elevenlabs"];
 
+// Watermark placements. Right-edge and true-bottom slots are deliberately
+// absent from the "bottom" row names' insets in the renderer: on vertical video
+// the platform UI (like/share rail, caption strip) covers those zones.
+export const WATERMARK_POSITIONS = ["top-left", "top-center", "top-right", "bottom-left", "bottom-right"];
+
 /** A fresh manifest with sane defaults. */
 export function blankManifest({ slug = "demo", name = "" } = {}) {
   return {
@@ -332,6 +337,16 @@ export function validate(manifest) {
   const capStyle = manifest?.captions?.style;
   if (capStyle && !CAPTION_STYLES.includes(capStyle)) {
     push(warnings, `captions.style "${capStyle}" is unknown — the renderer will fall back to "clean"`);
+  }
+
+  const wm = manifest?.watermark;
+  if (wm) {
+    if (!wm.text && !wm.image) {
+      push(warnings, "watermark has neither text nor image — it will not render");
+    }
+    if (wm.position && !WATERMARK_POSITIONS.includes(wm.position)) {
+      push(warnings, `watermark.position "${wm.position}" is unknown (${WATERMARK_POSITIONS.join(", ")}) — the renderer will fall back to "top-left"`);
+    }
   }
 
   if (manifest?.style) {

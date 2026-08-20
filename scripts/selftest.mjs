@@ -248,6 +248,9 @@ await main(async () => {
   // hybrid, not none: "none" would degrade the bottom-presenter scene to captions.
   short.presenter.mode = "hybrid";
   short.captions = { enabled: true, style: "shorts" };
+  // Channel-handle watermark over every scene except the outro card, which
+  // opts out — exercises both the overlay and the per-scene run splitting.
+  short.watermark = { text: "@selftest", position: "top-left", opacity: 0.6 };
   short.timeline = [
     {
       // framing deliberately omitted: the aspect mismatch must auto-default to
@@ -342,7 +345,7 @@ await main(async () => {
         { atSec: 4.8, shot: "screen", captionPlacement: "mid" },
       ],
     },
-    { id: "s-outro", kind: "card", durationSec: 3, title: "Thanks", cta: "acme.dev/start" },
+    { id: "s-outro", kind: "card", durationSec: 3, title: "Thanks", cta: "acme.dev/start", watermark: false },
   ];
   short.transitions = [{ after: "s-hook", type: "fade", ms: 300 }];
   await manifest.save(dir, short, { name: "shorts.json" });

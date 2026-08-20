@@ -71,6 +71,11 @@ Anything that exists only in your context is lost on the next run.
   // style: "clean" (pill near the bottom edge) or "shorts" (big centered
   // karaoke for vertical cuts — see the demo-shorts skill)
   "captions": { "enabled": true, "style": "clean" },
+  // Optional persistent channel-handle watermark (text and/or a small PNG).
+  // position: top-left (default) | top-center | top-right | bottom-left | bottom-right
+  // — the insets already avoid the zones platform UI covers on vertical video.
+  // Opt a scene out with "watermark": false on the scene (e.g. the CTA card).
+  // "watermark": { "text": "@handle", "position": "top-left", "opacity": 0.55 },
   "timeline": [ /* scenes */ ],
   "transitions": [ { "after": "hook", "type": "fade", "ms": 400 } ]
 }
