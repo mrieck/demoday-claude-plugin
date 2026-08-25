@@ -1,0 +1,19 @@
+{
+  "name": "demoday",
+  "owner": {
+    "name": "Mark Rieck"
+  },
+  "metadata": {
+    "description": "DemoDay - creates demo videos for your projects. Claude drives the browser/CLI, records, narrates with ElevenLabs via fal.ai, and renders with Remotion.",
+    "version": "0.1.0"
+  },
+  "plugins": [
+    {
+      "name": "demoday",
+      "source": "./",
+      "description": "Creates demo videos for your projects. Claude is given tools to drive the browser/cli, make recordings, and uses FAL.ai, ElevenLabs, and remotion to build a demo video with scene transitions. Supports both 16:9 promo/tutorial demos, and Short cut 9:16 listicle/cohost videos. Open source and MIT licensed.",
+      "category": "media",
+      "tags": ["demo-video", "ai-video", "indie-hacker-tools", "elevenlabs", "fal-ai", "remotion", "screen-recording", "macos"]
+    }
+  ]
+}
