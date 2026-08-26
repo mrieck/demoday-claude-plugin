@@ -139,19 +139,96 @@ One capture per scene, `framing: "pan"` (the default pan follows the click
 log), karaoke captions, gentle crossfades allowed. Pick this when the UI
 detail *is* the story and cuts would cheapen it.
 
+## 2b. The cover — frame 0 is the thumbnail
+
+TikTok uses frame 0 as the cover, Instagram's default `thumb_offset` is 0,
+Shorts grabs an early frame, and the posting API (Postiz) cannot override any
+of them. Whatever the first frame shows is what the channel grid shows. A run
+of Shorts that all open on the presenter's face reads as the same video posted
+eight times — so every Short declares a `cover`, a typographic hook card that
+**is** frame 0, holds 0.5s, then wipes away over the first scene while the
+narration is already running underneath (`--init` scaffolds it; `validate()`
+refuses to render until `hook` is written).
+
+```jsonc
+"cover": {
+  "hook": "You use AI for all your coding.",   // required, ≤60 chars, the strongest line
+  "kicker": "AI TECH STACK",                    // optional eyebrow label
+  "layout": "band",                             // stack | band | corner | stripe
+  "accent": "#8B5CF6",                          // defaults to brand.colors.primary
+  "portrait": "assets/cover-mark.png",          // optional circular presenter portrait
+  "holdSec": 0.5, "outSec": 0.5,                // fully visible, then the exit
+  "exit": "wipe-up"                             // wipe-up | dissolve | slide-left
+}
+```
+
+Writing it:
+
+1. **`hook`** is the video's single strongest line — usually the first
+   narration line, shortened to what fits three lines of huge type. A claim
+   or a question, never the product name (that is a logo card).
+2. **Vary the look against what is already posted.** Scan
+   `demo/*/{demo,shorts*}.json` for `cover.layout` and `cover.accent` and pick
+   a layout the last three Shorts did not use (each style scaffolds a
+   different default: listicle `band`, cohost `corner`, flashcard `stack`,
+   glide `stripe`) and, when the brand colour repeats, a different `accent`.
+   Same rotation idea as the presenter wardrobe.
+3. **`portrait`** keeps the card recognisably the presenter's without making
+   the face the whole cover — a `characters/<name>/` portrait, copied into
+   the project's `assets/`. Skip it on flashcard/glide (no-face styles).
+4. **Preview before rendering:**
+
+   ```bash
+   node scripts/render/render.mjs --project demo/<slug> --manifest shorts.json --cover-only
+   ```
+
+   Writes `out/<slug>-cover.png` in seconds. **Read the PNG and show it** to
+   the user; adjust hook/layout/accent until it works at phone-grid size
+   (would you tap it?), then do the full render, which writes the PNG again
+   beside the MP4.
+5. After rendering, `node scripts/render/cover-sheet.mjs` tiles every cover
+   under `demo/` into `demo/cover-sheet.png` — the grid as the channel will
+   show it. Two near-identical tiles means change one before posting.
+
+### The frozen-frame alternative (`cover.kind: "frame"`)
+
+No card at all: frame 0 is a frame of the video itself, frozen from a later
+timestamp — the poster a creator picks by scrubbing to a good moment — held
+~0.45s, then a hard cut to the real open while the narration already runs.
+It looks like a native "pick a cover from the video" thumbnail, without the
+typographic-card intro. Use it when the card feels like a title-card open, or
+to break up a grid of hook cards.
+
+```jsonc
+"cover": {
+  "kind": "frame",
+  "scene": "s-r2", "atSec": 2.6,     // scene-relative; omit `scene` for an absolute second
+  "holdSec": 0.45,                    // ≤0.6 — longer reads as a stalled video
+  "captions": false                   // drop the caption box: a mid-phrase box on the poster reads as a glitch
+}
+```
+
+Pick a frame that reads as a thumbnail on its own: an anchored split with the
+presenter below and a legible demo/post above, or a face punch-in. Preview it
+exactly like the card (`--cover-only`), and still vary the moment per video.
+No `hook`/`layout`/`portrait` apply. Existing projects need one render with
+`--sync-template` to pick the mode up.
+
 ## 3. Generate, render, QA
 
 ```bash
 node scripts/gen/tts.mjs       --project demo/<slug> --manifest shorts.json --all
 node scripts/gen/presenter.mjs --project demo/<slug> --manifest shorts.json --all   # face beats / split bottoms
 node scripts/gen/broll.mjs     --project demo/<slug> --manifest shorts.json --all   # stills auto-generate at 9:16
+node scripts/render/render.mjs --project demo/<slug> --manifest shorts.json --cover-only   # preview frame 0
 node scripts/render/render.mjs --project demo/<slug> --manifest shorts.json
 node scripts/qa.mjs            --project demo/<slug> --manifest shorts.json
 ```
 
-Output: `out/<slug>.mp4` at 1080×1920. If the project's Remotion app predates
-these features, render once with `--sync-template` (warns: overwrites local
-Remotion edits).
+Output: `out/<slug>.mp4` at 1080×1920 plus `out/<slug>-cover.png` (frame 0,
+the thumbnail). If the project's Remotion app predates these features (any
+project scaffolded before the cover existed), render once with
+`--sync-template` (warns: overwrites local Remotion edits).
 
 **QA for vertical**, on top of the standard pass:
 
@@ -171,13 +248,19 @@ Remotion edits).
   event clock is offset automatically — if it looks wrong, the events file is
   stale, not the renderer.)
 - Is UI text legible at a phone width? Fix with framing/beat choice, not font.
+- The cover: is `out/<slug>-cover.png` a complete, opaque card (no scene
+  bleeding through, no caption over it)? Hook text clear of the right edge and
+  bottom fifth? Distinct in layout *or* accent from the last three Shorts?
 
 ## Rules
 
 - **Same money rules as demo-video** — estimate before spending, narration
   before capture, one voice, everything in the manifest.
 - **`s-` prefix on every scene id.** Shared directories; collisions overwrite.
-- **Hook in the first two seconds.** Never open with a logo card.
+- **Hook in the first two seconds.** Never open with a logo card. The `cover`
+  is not one: it carries the hook *as text*, holds ≤0.5s, and wipes out with
+  the narration already running — never lengthen it, never put the product
+  name on it, never remove it (frame 0 is the thumbnail).
 - **Beat styles cut, they don't fade.** If a beat feels slow, cut it — don't
   ease it.
 - **Never regenerate landscape assets from a shorts run.** Fix the main demo

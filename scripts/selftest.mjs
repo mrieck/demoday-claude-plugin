@@ -251,6 +251,12 @@ await main(async () => {
   // Channel-handle watermark over every scene except the outro card, which
   // opts out — exercises both the overlay and the per-scene run splitting.
   short.watermark = { text: "@selftest", position: "top-left", opacity: 0.6 };
+  // Frame-0 hook card with a portrait: render.mjs must also emit the cover PNG,
+  // which is dimension-checked below — that PNG is what the platforms show.
+  short.cover = {
+    hook: "Your dashboard, one click", kicker: "Selftest", layout: "corner",
+    portrait: "assets/split-bottom.png", exit: "wipe-up",
+  };
   short.timeline = [
     {
       // framing deliberately omitted: the aspect mismatch must auto-default to
@@ -353,6 +359,14 @@ await main(async () => {
   const shortCheck = manifest.validate(short);
   if (!shortCheck.ok) throw new Error(`shorts manifest is invalid:\n  - ${shortCheck.errors.join("\n  - ")}`);
 
+  // Pin validate() on the cover: a hook-less cover must block, a bad layout must block.
+  const badCover = structuredClone(short);
+  badCover.cover = { layout: "sideways" };
+  const badCheck = manifest.validate(badCover);
+  if (badCheck.ok || !badCheck.errors.some((e) => e.includes("cover.hook")) || !badCheck.errors.some((e) => e.includes("cover.layout"))) {
+    throw new Error("validate() accepted a cover without a hook / with an unknown layout");
+  }
+
   const vertical = await runRenderPass({
     label: "vertical short",
     manifestName: "shorts.json",
@@ -361,12 +375,87 @@ await main(async () => {
     expectedSec: expectedRuntime(short),
   });
 
+  // The cover PNG must exist at the composition's size, and frame 0 must be
+  // opaque brand background at its top-left corner rather than the scene
+  // underneath — a card that fades in would hand the platforms a dark thumbnail.
+  const coverPng = path.join(dir, "out", "selftest-short-cover.png");
+  if (!existsSync(coverPng)) throw new Error("vertical short: render produced no cover PNG");
+  const coverMeta = await probe(coverPng);
+  if (coverMeta.width !== 540 || coverMeta.height !== 960) {
+    vertical.ok = false;
+    warn(`cover: expected 540x960, got ${coverMeta.width}x${coverMeta.height}`);
+  }
+  vertical.cover = coverPng;
+
+  // ---- pass 3: a 16:9 tutorial from the SAME project ------------------------
+  // The tutorial style: presenter.mode "always" puts a lip-synced corner bubble
+  // over every plain demo scene. This exercises the per-scene pip clip, the
+  // global presenter.pip config (square, top-right, resized), a scene-level pip
+  // position override, the pip: false opt-out, scene-level videoStartSec
+  // (chopping one continuous take), and a cuts-only timeline.
+  const tut = manifest.blankManifest({ slug: "selftest-tutorial", name: "Selftest Tutorial" });
+  tut.format = { width: 960, height: 540, fps: 30 };
+  tut.style = "tutorial";
+  tut.presenter.mode = "always";
+  tut.presenter.pip = { shape: "square", position: "top-right", sizePct: 18 };
+  tut.timeline = [
+    {
+      id: "t-step1", kind: "demo", target: "web", durationSec: 6,
+      narration: "One slash command and the plugin does the rest.",
+      audio: "audio/cli.mp3", words: "audio/cli.words.json",
+      video: "clips/demo.mp4", events: "clips/demo.events.json",
+      presenterVideo: "clips/presenter-bottom.mp4",
+    },
+    {
+      // Windows into the tail of the same take, with a per-scene pip override.
+      id: "t-step2", kind: "demo", target: "web", durationSec: 4,
+      narration: "This stands in for the presenter.",
+      audio: "audio/intro.mp3",
+      video: "clips/demo.mp4", videoStartSec: 4,
+      presenterVideo: "clips/presenter-bottom.mp4",
+      pip: { position: "bottom-left" },
+    },
+    {
+      // Opted out: no bubble, so no presenter clip is needed either.
+      id: "t-step3", kind: "demo", target: "cli", durationSec: 5,
+      narration: "Teams ship faster.",
+      audio: "audio/broll.mp3",
+      video: "clips/cli.mp4", events: "clips/cli.events.json",
+      pip: false,
+    },
+    { id: "t-outro", kind: "card", durationSec: 3, title: "Done", cta: "acme.dev/docs" },
+  ];
+  await manifest.save(dir, tut, { name: "tutorial.json" });
+
+  const tutCheck = manifest.validate(tut);
+  if (!tutCheck.ok) throw new Error(`tutorial manifest is invalid:\n  - ${tutCheck.errors.join("\n  - ")}`);
+
+  // Pin pending(): a pip scene missing its clip must report presenterVideo, and
+  // a pip: false scene must never demand one.
+  const tutProbe = structuredClone(tut);
+  delete tutProbe.timeline[0].presenterVideo;
+  const tutNeeds = manifest.pending(dir, tutProbe);
+  if (!tutNeeds.find((n) => n.sceneId === "t-step1")?.needs.includes("presenterVideo")) {
+    throw new Error("pending() missed the corner-pip presenter clip for t-step1");
+  }
+  if (tutNeeds.some((n) => n.sceneId === "t-step3" && n.needs.includes("presenterVideo"))) {
+    throw new Error("pending() demands a presenter clip for a pip: false scene");
+  }
+
+  const tutorial = await runRenderPass({
+    label: "tutorial",
+    manifestName: "tutorial.json",
+    outName: "selftest-tutorial.mp4",
+    expectW: 960, expectH: 540,
+    expectedSec: expectedRuntime(tut),
+  });
+
   if (!keep) {
     // Keep the rendered videos but drop the scaffolded node_modules, which is large.
     await rm(path.join(dir, "remotion", "node_modules"), { recursive: true, force: true }).catch(() => {});
   }
 
-  const passes = [landscape, vertical];
+  const passes = [landscape, vertical, tutorial];
   const ok = passes.every((p) => p.ok);
   report(
     ok

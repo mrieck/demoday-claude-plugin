@@ -83,6 +83,18 @@ clear of the like/share rail and caption strip on vertical platforms. A scene
 opts out with `"watermark": false` (e.g. a CTA card whose logo it would sit on);
 the mark fades over 0.25s at the edges of each run instead of popping.
 
+## Corner bubble (presenter.mode "always")
+
+In mode `always` every plain demo scene overlays a lip-synced corner bubble from
+its own `presenterVideo` clip. Its look lives in `presenter.pip` (`shape`
+circle/square, `position` any corner, `sizePct`) and renders in
+`remotion-template/src/scenes/PresenterPip.jsx`; a scene overrides with its own
+`pip` object or opts out with `pip: false`. A "corner pip clip is Ns for an Ms
+scene — the speaker will freeze" warning from build-props is an editing note:
+the avatar engine quantises clips to 5s/10s, so split the step or shorten the
+narration. Older projects only pick the bubble up after
+`render.mjs --sync-template` (which overwrites local Remotion edits).
+
 ## Diagnosing a bad render
 
 | Symptom | Cause |

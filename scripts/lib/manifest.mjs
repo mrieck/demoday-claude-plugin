@@ -73,6 +73,43 @@ export const VOICE_PROVIDERS = ["fal", "elevenlabs"];
 // the platform UI (like/share rail, caption strip) covers those zones.
 export const WATERMARK_POSITIONS = ["top-left", "top-center", "top-right", "bottom-left", "bottom-right"];
 
+// Corner-bubble presenter (presenter.mode "always"). Configured globally at
+// presenter.pip = { shape, position, sizePct }; a scene may override with its own
+// pip object, or opt out entirely with pip: false (a step the bubble would cover).
+export const PIP_SHAPES = ["circle", "square"];
+export const PIP_POSITIONS = ["top-left", "top-right", "bottom-left", "bottom-right"];
+
+/**
+ * The cover — a hook card baked into FRAME 0 and wiped away ~0.5s later.
+ *
+ * Every vertical platform takes an early frame as the thumbnail (TikTok frame 0,
+ * Instagram thumb_offset 0, Shorts an early frame) and the posting API cannot
+ * override it, so a run of Shorts that all open on the presenter's face looks
+ * like one video posted eight times. `cover` makes frame 0 a distinct
+ * typographic card: it is FULLY rendered at frame 0 (no entrance animation —
+ * a fading-in card would give the platforms a black thumbnail), holds for
+ * `holdSec`, then exits over `outSec` while narration already runs underneath.
+ * Layout and accent are meant to be rotated per video so the channel grid varies.
+ */
+export const COVER_LAYOUTS = ["stack", "band", "corner", "stripe"];
+export const COVER_EXITS = ["wipe-up", "dissolve", "slide-left", "cut"];
+export const COVER_DEFAULTS = { layout: "stack", exit: "wipe-up", holdSec: 0.5, outSec: 0.5 };
+/**
+ * cover.kind:
+ *   "card"  (default) — the typographic hook card above.
+ *   "frame" — no card at all: frame 0 is a frozen frame of the video itself,
+ *             taken from a later timestamp (`atSec`, absolute; or `scene` +
+ *             `atSec` scene-relative — typically an anchored split with the
+ *             presenter below and a full caption phrase on the seam). It holds
+ *             for `holdSec` then hard-cuts to the real start, like a video
+ *             whose poster was picked from a timestamp. `captions: false`
+ *             drops the caption box from the frozen frame (a mid-phrase box
+ *             reads as a glitch). Rotate the timestamp per video so the
+ *             channel grid still varies.
+ */
+export const COVER_KINDS = ["card", "frame"];
+export const COVER_FRAME_DEFAULTS = { kind: "frame", exit: "cut", holdSec: 0.45, outSec: 0 };
+
 /** A fresh manifest with sane defaults. */
 export function blankManifest({ slug = "demo", name = "" } = {}) {
   return {
@@ -106,6 +143,8 @@ export function blankManifest({ slug = "demo", name = "" } = {}) {
      * that remains after the transition has taken its share.
      */
     pacing: { breathSec: 0.45 },
+    /** Frame-0 hook card; see COVER_LAYOUTS. Null = the first scene is the cover. */
+    cover: null,
     timeline: [],
     transitions: [],
   };
@@ -349,6 +388,25 @@ export function validate(manifest) {
     }
   }
 
+  // Shared field checks for presenter.pip and a scene-level pip override.
+  const checkPip = (pip, at) => {
+    if (pip.shape && !PIP_SHAPES.includes(pip.shape)) {
+      push(warnings, `${at}.shape "${pip.shape}" is unknown (${PIP_SHAPES.join(", ")}) — the renderer will fall back to "circle"`);
+    }
+    if (pip.position && !PIP_POSITIONS.includes(pip.position)) {
+      push(warnings, `${at}.position "${pip.position}" is unknown (${PIP_POSITIONS.join(", ")}) — the renderer will fall back to "bottom-left"`);
+    }
+    if (pip.sizePct != null && !(pip.sizePct >= 10 && pip.sizePct <= 40)) {
+      push(warnings, `${at}.sizePct ${pip.sizePct} is outside 10-40 — under 10 is unreadable, over 40 covers the UI`);
+    }
+  };
+  if (manifest?.presenter?.pip) {
+    checkPip(manifest.presenter.pip, "presenter.pip");
+    if (mode !== "always") {
+      push(warnings, `presenter.pip is set but presenter.mode is "${mode || "hybrid"}" — the corner bubble only renders in mode "always"`);
+    }
+  }
+
   if (manifest?.style) {
     const st = STYLES[manifest.style];
     if (!st) {
@@ -359,6 +417,64 @@ export function validate(manifest) {
   }
   if (provider === "elevenlabs" && !manifest?.voice?.voiceId) {
     push(errors, 'voice.provider is "elevenlabs" but voice.voiceId is missing — run gen/voice-design.mjs');
+  }
+
+  const cover = manifest?.cover;
+  if (cover) {
+    if (typeof cover !== "object" || Array.isArray(cover)) {
+      push(errors, "cover must be an object { hook, kicker?, layout?, accent?, portrait?, holdSec?, outSec?, exit? } or { kind: \"frame\", atSec, scene?, holdSec? }");
+    } else {
+      const kind = cover.kind || "card";
+      if (!COVER_KINDS.includes(kind)) {
+        push(errors, `cover.kind must be one of ${COVER_KINDS.join(" | ")}, got "${kind}"`);
+      }
+      if (kind === "frame") {
+        if (!(typeof cover.atSec === "number" && cover.atSec >= 0)) {
+          push(errors, 'cover.kind "frame" needs cover.atSec (seconds into the video, or into cover.scene when set) — the frozen frame that becomes the thumbnail');
+        }
+        if (cover.scene && !manifest?.timeline?.some((sc) => sc.id === cover.scene)) {
+          push(errors, `cover.scene "${cover.scene}" is not a scene id in the timeline`);
+        }
+        if (cover.exit && !COVER_EXITS.includes(cover.exit)) {
+          push(errors, `cover.exit must be one of ${COVER_EXITS.join(" | ")}, got "${cover.exit}"`);
+        }
+        for (const k of ["holdSec", "outSec"]) {
+          if (cover[k] != null && !(cover[k] >= 0)) push(errors, `cover.${k} must be >= 0`);
+        }
+        const hold = cover.holdSec ?? COVER_FRAME_DEFAULTS.holdSec;
+        if (hold > 0.8) push(warnings, `cover holds a frozen frame for ${hold}s — past ~0.6s it reads as a stalled video, not a poster`);
+        if (fmt.width && fmt.height && fmt.width > fmt.height) {
+          push(warnings, "cover is set on a landscape video — it exists for vertical Shorts, where platforms take frame 0 as the thumbnail");
+        }
+      } else if (!cover.hook || typeof cover.hook !== "string") {
+        push(errors, "cover.hook is required — the big text on the frame-0 card (this is the thumbnail every platform shows)");
+      } else if (cover.hook.length > 60) {
+        push(warnings, `cover.hook is ${cover.hook.length} chars — over 60 it wraps past three lines and shrinks below thumbnail-legible size`);
+      }
+      if (kind === "card" && cover.layout && !COVER_LAYOUTS.includes(cover.layout)) {
+        push(errors, `cover.layout must be one of ${COVER_LAYOUTS.join(" | ")}, got "${cover.layout}"`);
+      }
+      if (kind === "card" && cover.exit && !COVER_EXITS.includes(cover.exit)) {
+        push(errors, `cover.exit must be one of ${COVER_EXITS.join(" | ")}, got "${cover.exit}"`);
+      }
+      if (kind === "card" && cover.accent && !/^#[0-9a-f]{6}$/i.test(cover.accent)) {
+        push(warnings, `cover.accent "${cover.accent}" is not a #rrggbb colour — the renderer will fall back to brand.colors.primary`);
+      }
+      if (kind === "card") for (const k of ["holdSec", "outSec"]) {
+        if (cover[k] != null && !(cover[k] >= 0)) push(errors, `cover.${k} must be >= 0`);
+      }
+      const coverSec = kind === "card" ? (cover.holdSec ?? COVER_DEFAULTS.holdSec) + (cover.outSec ?? COVER_DEFAULTS.outSec) : 0;
+      if (coverSec > 2) {
+        push(warnings, `cover holds ${coverSec}s before the first scene shows — a card past 2s is a logo-card open, not a hook`);
+      }
+      const first = manifest?.timeline?.[0];
+      if (first?.durationSec != null && coverSec > first.durationSec) {
+        push(warnings, `cover (${coverSec}s) outlasts the first scene "${first.id}" (${first.durationSec}s) — it will cover a scene cut`);
+      }
+      if (fmt.width && fmt.height && fmt.width > fmt.height) {
+        push(warnings, "cover is set on a landscape video — it exists for vertical Shorts, where platforms take frame 0 as the thumbnail");
+      }
+    }
   }
 
   const timeline = manifest?.timeline;
@@ -438,6 +554,28 @@ export function validate(manifest) {
       }
       if (!scene.actions && !scene.video) {
         push(errors, `${at}: needs an actions file to perform, or an already-recorded video`);
+      }
+    }
+
+    if (scene.videoStartSec != null) {
+      if (!(scene.videoStartSec >= 0)) {
+        push(errors, `${at}: videoStartSec must be >= 0`);
+      }
+      if (scene.kind !== "demo") {
+        push(warnings, `${at}: videoStartSec only affects demo scenes`);
+      }
+      if (scene.beats?.length) {
+        push(warnings, `${at}: beats carry their own videoStartSec — the scene-level value is ignored`);
+      }
+    }
+    if (scene.pip != null) {
+      if (scene.pip !== false && (typeof scene.pip !== "object" || Array.isArray(scene.pip))) {
+        push(warnings, `${at}: pip must be false or { shape, position, sizePct } — it will be ignored`);
+      } else if (scene.pip !== false) {
+        checkPip(scene.pip, `${at}: pip`);
+      }
+      if (mode !== "always") {
+        push(warnings, `${at}: pip is set but presenter.mode is "${mode || "hybrid"}" — the corner bubble only renders in mode "always"`);
       }
     }
 
@@ -560,7 +698,11 @@ export function pending(projectDir, manifest) {
     if (scene.kind !== "card" && !has(scene.video)) needs.push("video");
     const wantsPresenterClip =
       scene.bottom?.kind === "presenter" ||
-      (scene.beats || []).some((b) => b.shot === "face" || (b.shot === "split" && scene.bottom?.kind === "presenter"));
+      (scene.beats || []).some((b) => b.shot === "face" || (b.shot === "split" && scene.bottom?.kind === "presenter")) ||
+      // Corner pip: mode "always" puts the presenter over every plain demo scene
+      // unless the scene opted out with pip: false.
+      (manifest.presenter?.mode === "always" && scene.kind === "demo" &&
+        !scene.beats?.length && scene.pip !== false);
     if (wantsPresenterClip && scene.audio && !has(scene.presenterVideo)) {
       needs.push("presenterVideo");
     }

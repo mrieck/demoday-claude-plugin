@@ -67,6 +67,11 @@ Anything that exists only in your context is lost on the next run.
   //            "designPrompt": "weathered lobster-boat captain...", "stability": 0.4 },
   "presenter": { "mode": "hybrid", "description": "a woman in her 30s, smart casual, warm and direct",
                  "characterImage": "assets/presenter.png", "engine": "fal-ai/infinitalk" },
+  // In mode "always" (the tutorial style) every plain demo scene gets a
+  // lip-synced corner bubble; "pip" configures its look. All fields optional:
+  // shape "circle" (default) | "square", position any corner (default
+  // bottom-left), sizePct 10-40 (% of frame width, default 22).
+  // "presenter": { "mode": "always", "pip": { "shape": "circle", "position": "bottom-left", "sizePct": 22 }, ... },
   "music": { "enabled": false, "bed": "assets/bed.mp3", "duckDb": -14 },
   // style: "clean" (pill near the bottom edge) or "shorts" (big centered
   // karaoke for vertical cuts — see the demo-shorts skill)
@@ -76,6 +81,13 @@ Anything that exists only in your context is lost on the next run.
   // — the insets already avoid the zones platform UI covers on vertical video.
   // Opt a scene out with "watermark": false on the scene (e.g. the CTA card).
   // "watermark": { "text": "@handle", "position": "top-left", "opacity": 0.55 },
+  // Vertical only: the hook card that IS frame 0 — the thumbnail every platform
+  // shows — held ~0.5s then wiped away over the first scene. See demo-shorts §2b.
+  // layout: stack | band | corner | stripe   exit: wipe-up | dissolve | slide-left
+  // "cover": { "hook": "You use AI for all your coding.", "kicker": "AI tech stack",
+  //            "layout": "band", "accent": "#8B5CF6", "portrait": "assets/cover-mark.png" },
+  // — or a frozen frame of the video itself instead of a card (no hook text):
+  // "cover": { "kind": "frame", "scene": "s-r2", "atSec": 2.6, "holdSec": 0.45, "captions": false },
   "timeline": [ /* scenes */ ],
   "transitions": [ { "after": "hook", "type": "fade", "ms": 400 } ]
 }
@@ -125,7 +137,14 @@ picture hard-cuts between windows:
   // Only when the composition aspect differs from the capture (a Short cut from
   // 16:9 footage): "pan" (default — window follows the clicks), "card" (whole UI
   // letterboxed in a card, with an optional "headline" below), or "cover" (crop).
-  "framing": "pan" }
+  "framing": "pan",
+  // Chop one continuous take: play this scene's `video` from 22s in (tutorial
+  // style — every step shares the take). Ignored when the scene has beats
+  // (each beat carries its own videoStartSec).
+  "videoStartSec": 22,
+  // Corner bubble (presenter.mode "always" only): false suppresses it on this
+  // scene; an object overrides presenter.pip for this scene.
+  "pip": { "position": "bottom-right" } }
 
 // On-camera presenter
 { "id": "hook", "kind": "presenter",

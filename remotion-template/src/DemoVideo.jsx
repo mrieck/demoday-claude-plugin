@@ -1,5 +1,5 @@
 import React from "react";
-import { AbsoluteFill, Audio, Sequence, staticFile, useVideoConfig } from "remotion";
+import { AbsoluteFill, Audio, Freeze, Sequence, staticFile, useVideoConfig } from "remotion";
 import { TransitionSeries, linearTiming } from "@remotion/transitions";
 import { fade } from "@remotion/transitions/fade";
 import { wipe } from "@remotion/transitions/wipe";
@@ -14,6 +14,7 @@ import { BRollClip } from "./scenes/BRollClip.jsx";
 import { Card } from "./scenes/Card.jsx";
 import { Captions } from "./components/Captions.jsx";
 import { Watermark } from "./components/Watermark.jsx";
+import { HookCard, FrameCover } from "./components/HookCard.jsx";
 import { themeFrom } from "./theme.js";
 
 const PRESENTATIONS = { fade, wipe, slide };
@@ -38,19 +39,25 @@ export function totalFrames(props, fps) {
   return Math.max(1, sum - overlap);
 }
 
-const SceneBody = ({ scene, theme, fps, presenterMode, pipVideo, split }) => {
+const SceneBody = ({ scene, theme, fps, presenterMode, pipVideo, pipDefaults, split }) => {
   switch (scene.kind) {
-    case "demo":
+    case "demo": {
       if (scene.beats?.length) return <BeatScene scene={scene} theme={theme} fps={fps} presenterMode={presenterMode} />;
-      if (split) return <SplitScene scene={scene} theme={theme} fps={fps} presenterMode={presenterMode} />;
+      if (split) return <SplitScene scene={scene} theme={theme} fps={fps} presenterMode={presenterMode} demoStartSec={scene.videoStartSec || 0} />;
+      // The corner pip prefers the scene's own lip-synced clip (the tutorial
+      // model) over the legacy global presenter.pipVideo; pip: false opts a
+      // scene out, a pip object overrides the manifest-level config.
+      const pipClip = scene.pip === false ? null : scene.presenterVideo || pipVideo;
+      const pipConf = { ...pipDefaults, ...(typeof scene.pip === "object" ? scene.pip : null) };
       return (
         <>
-          <DemoClip scene={scene} theme={theme} fps={fps} />
-          {presenterMode === "always" && pipVideo ? (
-            <PresenterPip video={pipVideo} theme={theme} />
+          <DemoClip scene={scene} theme={theme} fps={fps} startFromSec={scene.videoStartSec || 0} />
+          {presenterMode === "always" && pipClip ? (
+            <PresenterPip video={pipClip} theme={theme} pip={pipConf} />
           ) : null}
         </>
       );
+    }
     case "presenter":
       // With presenter.mode "none" a presenter beat degrades to a card rather than
       // failing the render, so switching modes never leaves a hole in the timeline.
@@ -106,7 +113,9 @@ export const DemoVideo = (props) => {
     }
   }
 
-  return (
+  // Everything visible, with no audio elements: it is rendered once for real and,
+  // for a frozen-frame cover, once more inside <Freeze> as frame 0.
+  const renderVisual = ({ captions = true } = {}) => (
     <AbsoluteFill style={{ backgroundColor: theme.bg }}>
       <TransitionSeries>
         {scenes.flatMap((scene, i) => {
@@ -119,6 +128,7 @@ export const DemoVideo = (props) => {
                 fps={fps}
                 presenterMode={presenterMode}
                 pipVideo={props.presenter?.pipVideo}
+                pipDefaults={props.presenter?.pip || {}}
                 split={scene.kind === "demo" && framingFor(scene, width, height) === "split"}
               />
             </TransitionSeries.Sequence>,
@@ -158,8 +168,7 @@ export const DemoVideo = (props) => {
             : resolveBottom(scene, presenterMode).kind === "captions" ? "bottom" : "seam";
         return (
           <Sequence key={`a-${scene.id}`} from={from} durationInFrames={frames}>
-            <Audio src={staticFile(scene.audio)} />
-            {props.captions?.enabled !== false && scene.wordTimings?.length ? (
+            {captions && props.captions?.enabled !== false && scene.wordTimings?.length ? (
               <Captions
                 words={scene.wordTimings}
                 theme={theme}
@@ -176,6 +185,34 @@ export const DemoVideo = (props) => {
         );
       })}
 
+      {wmRuns.map((r) => (
+        <Sequence key={`wm-${r.from}`} from={r.from} durationInFrames={r.to - r.from}>
+          <Watermark watermark={wm} theme={theme} fps={fps} runFrames={r.to - r.from} />
+        </Sequence>
+      ))}
+
+      {/* The cover sits above everything (captions, watermark) for its short
+          life: frame 0 is the thumbnail every platform shows, so it must be a
+          complete card, not a face with a caption over it. Narration is on the
+          absolute audio track above and starts underneath it. */}
+    </AbsoluteFill>
+  );
+  const visual = renderVisual();
+
+  const coverFrames = props.cover
+    ? secToFrames((props.cover.holdSec ?? 0.5) + (props.cover.kind === "frame" ? (props.cover.outSec ?? 0) : (props.cover.outSec ?? 0.5)), fps)
+    : 0;
+
+  return (
+    <AbsoluteFill style={{ backgroundColor: theme.bg }}>
+      {visual}
+
+      {audioTrack.map(({ scene, from, frames }) => (
+        <Sequence key={`a-${scene.id}`} from={from} durationInFrames={frames}>
+          <Audio src={staticFile(scene.audio)} />
+        </Sequence>
+      ))}
+
       {props.music?.enabled && props.music.bed ? (
         <Audio
           src={staticFile(props.music.bed)}
@@ -191,11 +228,20 @@ export const DemoVideo = (props) => {
         />
       ) : null}
 
-      {wmRuns.map((r) => (
-        <Sequence key={`wm-${r.from}`} from={r.from} durationInFrames={r.to - r.from}>
-          <Watermark watermark={wm} theme={theme} fps={fps} runFrames={r.to - r.from} />
+
+      {props.cover?.kind === "frame" ? (
+        <Sequence from={0} durationInFrames={coverFrames}>
+          <FrameCover cover={props.cover} fps={fps}>
+            <Freeze frame={secToFrames(props.cover.frameSec || 0, fps)}>
+              {props.cover.captions === false ? renderVisual({ captions: false }) : visual}
+            </Freeze>
+          </FrameCover>
         </Sequence>
-      ))}
+      ) : props.cover?.hook ? (
+        <Sequence from={0} durationInFrames={coverFrames}>
+          <HookCard cover={props.cover} theme={theme} fps={fps} />
+        </Sequence>
+      ) : null}
 
       {/* Fade the very end to black so the video does not stop on a hard cut. */}
       <Sequence from={Math.max(0, total - secToFrames(0.5, fps))}>

@@ -29,7 +29,7 @@ const ENTRY = "src/index.jsx";
 
 const USAGE =
   "render.mjs --project <dir> [--manifest <file>] [--out final.mp4] [--studio] " +
-  "[--scene <id>] [--quality 18] [--sync-template]";
+  "[--scene <id>] [--quality 18] [--sync-template] [--cover-only]";
 
 function run(cmd, args, cwd) {
   return new Promise((resolve, reject) => {
@@ -96,6 +96,28 @@ await main(async () => {
   const outFile = path.resolve(args.out || path.join(projectDir, "out", `${props.slug || "demo"}.mp4`));
   await mkdir(path.dirname(outFile), { recursive: true });
 
+  // The cover PNG: frame 0, which is what every vertical platform shows as the
+  // thumbnail. Rendered alongside the video whenever the manifest has a cover,
+  // and on its own with --cover-only — the seconds-long preview loop for
+  // getting the hook card right before paying for a full render.
+  const coverOnly = boolArg(args["cover-only"], false);
+  const coverFile = props.cover ? outFile.replace(/\.mp4$/i, "") + "-cover.png" : null;
+  const renderCover = async () => {
+    info(`  cover (frame 0) -> ${coverFile}`);
+    await run("npx", [
+      "remotion", "still", ENTRY, "DemoVideo", coverFile,
+      "--frame", "0",
+      "--props", propsFile,
+      "--public-dir", projectDir,
+      "--log", args.verbose ? "verbose" : "info",
+    ], appDir);
+  };
+  if (coverOnly) {
+    if (!coverFile) throw new Error("--cover-only needs a `cover` block in the manifest (cover.hook is the card's text).");
+    await renderCover();
+    return report(`  done: ${coverFile} — Read it to preview the thumbnail`, { ok: true, cover: coverFile, coverOnly: true });
+  }
+
   const renderArgs = [
     // The entry point is passed explicitly: Remotion's auto-detection does not
     // find src/index.jsx reliably, and the failure message is unhelpful.
@@ -108,6 +130,8 @@ await main(async () => {
 
   info(`  rendering -> ${outFile}`);
   await run("npx", renderArgs, appDir);
+
+  if (coverFile) await renderCover();
 
   const meta = await probe(outFile).catch(() => null);
   if (meta && Math.abs((meta.duration || 0) - runtime) > 1) {
@@ -126,6 +150,7 @@ await main(async () => {
       width: meta?.width ?? null,
       height: meta?.height ?? null,
       scenes: props.timeline.length,
+      cover: coverFile,
     }
   );
 });

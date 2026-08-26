@@ -150,11 +150,15 @@ await main(async () => {
     );
   }
 
-  // Three uses of a presenter clip: full presenter scenes, the bottom zone of a
-  // split demo scene, and full-bleed face beats inside a beat-cut demo scene.
+  // Four uses of a presenter clip: full presenter scenes, the bottom zone of a
+  // split demo scene, full-bleed face beats inside a beat-cut demo scene, and the
+  // corner pip that mode "always" puts over every plain demo scene (pip: false
+  // opts a scene out; beat/split scenes have their own presenter slots).
   const wantsClip = (s) =>
     s.kind === "demo" &&
-    (s.bottom?.kind === "presenter" || (s.beats || []).some((b) => b.shot === "face"));
+    (s.bottom?.kind === "presenter" ||
+      (s.beats || []).some((b) => b.shot === "face") ||
+      (mode === "always" && !s.beats?.length && s.pip !== false));
   const scenes = args.character
     ? []
     : args.all
@@ -294,7 +298,8 @@ await main(async () => {
     await mkdir(path.dirname(videoAbs), { recursive: true });
 
     const hasFaceBeats = (scene.beats || []).some((b) => b.shot === "face");
-    info(`  ${scene.id}: animating presenter (${engine}${isBottom ? (hasFaceBeats ? ", face beats" : ", bottom zone") : ""})…`);
+    const isPip = isBottom && !scene.bottom && !hasFaceBeats;
+    info(`  ${scene.id}: animating presenter (${engine}${isBottom ? (hasFaceBeats ? ", face beats" : isPip ? ", corner pip" : ", bottom zone") : ""})…`);
     const r = await animate({
       projectDir,
       imageFile: isBottom ? (hasFaceBeats ? await facePortrait() : await bottomPortrait()) : characterAbs,

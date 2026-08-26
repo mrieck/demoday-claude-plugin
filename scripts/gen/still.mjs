@@ -34,7 +34,7 @@ import { report, info, main } from "../lib/log.mjs";
 
 const USAGE =
   "still.mjs --project <dir> [--manifest <file>] --out <file.png> " +
-  '(--prompt "…" [--aspect 16:9] | --edit "…" --from <image> [--ref <image>]…) ' +
+  '(--prompt "…" | --edit "…" --from <image> [--ref <image>]…) [--aspect 16:9] ' +
   "[--scene <id>] [--character] [--model nano-banana-pro] [--force]";
 
 await main(async () => {
@@ -58,10 +58,14 @@ await main(async () => {
     const refs = (args.ref || []).map((r) => manifest.resolveIn(projectDir, r));
     const sources = [from, ...refs];
     const spec = resolve(IMAGE_EDIT, modelName);
-    info(`  editing ${path.basename(from)} (${sources.length} source image(s)) via ${spec.endpoint}`);
+    // Without --aspect the edit model infers the output aspect from the source
+    // images ("auto") — a portrait-format --ref can drag a 9:16 --from to 3:4,
+    // so pass --aspect explicitly when the output shape matters.
+    const aspect = args.aspect;
+    info(`  editing ${path.basename(from)} (${sources.length} source image(s)) via ${spec.endpoint}${aspect ? ` (${aspect})` : ""}`);
     result = await cache.memo(
       projectDir,
-      { kind: "still-edit", model: spec.endpoint, params: { instruction }, files: sources },
+      { kind: "still-edit", model: spec.endpoint, params: { instruction, ...(aspect ? { aspect } : {}) }, files: sources },
       async () => {
         const image_urls = [];
         for (const s of sources) image_urls.push(await toUrl(s));
@@ -69,6 +73,7 @@ await main(async () => {
           prompt: instruction,
           image_urls,
           num_images: 1,
+          ...(aspect ? { aspect_ratio: aspect } : {}),
         });
         const url = extractUrl(data);
         if (!url) throw new Error(`${spec.endpoint} returned no image`);

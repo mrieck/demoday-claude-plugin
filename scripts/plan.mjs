@@ -89,6 +89,12 @@ await main(async () => {
       // Cut-driven styles carry no scene transitions; the beats do the cutting.
       if (style.transitionPolicy === "cuts") m.transitions = [];
     }
+    // Vertical cuts scaffold a frame-0 hook card (the thumbnail every platform
+    // shows). hook is left empty on purpose: validate() refuses to render until
+    // it is written, so a Short cannot ship with the presenter's face as its cover.
+    if (vertical) {
+      m.cover = { hook: "", kicker: "", layout: style?.coverLayout || manifest.COVER_DEFAULTS.layout };
+    }
 
     await manifest.save(projectDir, m, { name });
     return report(`  created ${manifest.manifestPath(projectDir, name)}`, {

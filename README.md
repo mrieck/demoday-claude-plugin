@@ -53,6 +53,10 @@ timed to the narration word by word.*
   so every scene lands exactly on the voice.
 - 🧑‍💼 **Optional on-camera presenter** — an AI presenter for the intro, outro
   and cutaways, lip-synced to the same voice as the narration.
+- 🧭 **Wide videos in named styles too** — `launch` (classic promo), `anchor`
+  (avatar-led), `explainer` (no face), or `tutorial`: a step-by-step walkthrough
+  with the full workflow on screen and the presenter riding along as a corner
+  bubble (circle or rounded square, any corner).
 - 🗣️ **Custom character voices** — describe a voice in plain English
   (*"weathered lobster-boat captain, thick coastal accent"*) and the whole demo
   is narrated in it.

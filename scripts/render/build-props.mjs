@@ -63,7 +63,15 @@ export async function buildProps(projectDir, { lenient = false, name = manifest.
       } else {
         const meta = await probe(abs).catch(() => null);
         if (meta?.duration) {
-          const claimed = scene.durationSec || meta.duration;
+          // A scene windowing into a longer take (scene-level videoStartSec, the
+          // continuous-capture tutorial pattern) only has the clip's tail to play;
+          // beats ignore the scene-level value and window per beat instead.
+          const startSec = scene.beats?.length ? 0 : scene.videoStartSec || 0;
+          const avail = meta.duration - startSec;
+          const claimed = scene.durationSec || avail;
+          const clipDesc = startSec
+            ? `clip has ${fmtDuration(avail)} left after videoStartSec ${startSec}s`
+            : `clip is ${fmtDuration(meta.duration)}`;
           // Never ask the renderer for more video than exists — BUT never trim a
           // scene so short that it cuts its own narration off mid-word, or that the
           // next line starts before this one ends. A clip that is fractionally
@@ -71,16 +79,16 @@ export async function buildProps(projectDir, { lenient = false, name = manifest.
           const floor = isLast
             ? (scene.narrationSec || 0)
             : minSceneDuration(manifestRef, scene);
-          if (meta.duration < claimed - 0.1) {
-            if (meta.duration >= floor) {
+          if (avail < claimed - 0.1) {
+            if (avail >= floor) {
               warn(
-                `scene "${scene.id}": clip is ${fmtDuration(meta.duration)} but the timeline ` +
+                `scene "${scene.id}": ${clipDesc} but the timeline ` +
                 `wants ${fmtDuration(claimed)} — trimming the scene to the clip.`
               );
-              out.durationSec = meta.duration;
+              out.durationSec = avail;
             } else {
               warn(
-                `scene "${scene.id}": clip is ${fmtDuration(meta.duration)}, shorter than the ` +
+                `scene "${scene.id}": ${clipDesc}, shorter than the ` +
                 `${fmtDuration(floor)} its narration needs — holding the last frame instead of ` +
                 `cutting the voice off. Re-record it with --target-duration ${floor.toFixed(2)}.`
               );
@@ -139,6 +147,28 @@ export async function buildProps(projectDir, { lenient = false, name = manifest.
           `${scene.durationSec.toFixed(1)}s scene — the speaker will freeze for the last ` +
           `${(scene.durationSec - pMeta.duration).toFixed(1)}s.`
         );
+      }
+    }
+    // Corner pip (mode "always" over a plain demo scene): a missing clip is only
+    // a warning — the bubble is silently absent, never a black frame — so a
+    // pre-pip "always" project stays renderable exactly as before. A clip
+    // meaningfully shorter than the scene freezes at the tail (the avatar engine
+    // quantises to 5s/10s): the fix is editorial — split the step or shorten the
+    // narration — so say that.
+    if (m.presenter?.mode === "always" && scene.kind === "demo" &&
+        !scene.beats?.length && !scene.bottom && scene.framing !== "split" && scene.pip !== false) {
+      const abs = scene.presenterVideo ? manifest.resolveIn(projectDir, scene.presenterVideo) : null;
+      if (!abs || !existsSync(abs)) {
+        warn(`scene "${scene.id}": corner pip clip missing — the bubble will not appear; run gen/presenter.mjs --all`);
+      } else {
+        const pMeta = await probe(abs).catch(() => null);
+        if (pMeta?.duration && scene.durationSec && pMeta.duration < scene.durationSec - 0.25) {
+          warn(
+            `scene "${scene.id}": corner pip clip is ${pMeta.duration.toFixed(1)}s for a ` +
+            `${scene.durationSec.toFixed(1)}s scene — the speaker will freeze for the last ` +
+            `${(scene.durationSec - pMeta.duration).toFixed(1)}s; split the step or shorten the narration.`
+          );
+        }
       }
     }
     if ((scene.beats || []).some((b) => b.shot === "face") && m.presenter?.mode !== "none") {
@@ -226,6 +256,46 @@ export async function buildProps(projectDir, { lenient = false, name = manifest.
     problems.push(`watermark image not found at ${m.watermark.image}`);
   }
 
+  // The frame-0 hook card. Defaults are resolved here, not in the component, so
+  // props.json shows exactly what will render; accent falls back to the brand.
+  let cover = null;
+  if (m.cover && (m.cover.kind || "card") === "frame") {
+    // Frozen-frame cover: resolve the timestamp to an absolute second on the
+    // same overlapping timeline the composition lays scenes out on.
+    let frameSec = m.cover.atSec;
+    const starts = new Map();
+    let cursor = 0;
+    for (const [i, sc] of timeline.entries()) {
+      starts.set(sc.id, cursor);
+      cursor += sc.durationSec || 0;
+      if (i < timeline.length - 1) cursor -= transitionAfterSec(m, sc.id);
+    }
+    const totalSec = cursor;
+    if (m.cover.scene) {
+      const sc = timeline.find((x) => x.id === m.cover.scene);
+      if (!sc) problems.push(`cover.scene "${m.cover.scene}" is not in the timeline`);
+      else {
+        if (m.cover.atSec > (sc.durationSec || 0)) {
+          warn(`cover.atSec ${m.cover.atSec}s is past the end of scene "${sc.id}" (${sc.durationSec}s) — clamping`);
+        }
+        frameSec = starts.get(sc.id) + Math.min(m.cover.atSec, Math.max(0, (sc.durationSec || 0) - 0.05));
+      }
+    }
+    if (typeof frameSec !== "number" || !(frameSec >= 0)) problems.push("cover.atSec is missing — the second of the video to freeze as frame 0");
+    else if (frameSec >= totalSec) problems.push(`cover.atSec resolves to ${frameSec.toFixed(2)}s but the video is ${totalSec.toFixed(2)}s long`);
+    const hold = m.cover.holdSec ?? manifest.COVER_FRAME_DEFAULTS.holdSec;
+    if (typeof frameSec === "number" && frameSec < hold) {
+      warn(`cover.atSec ${frameSec}s is inside the ${hold}s hold — the poster would be the same as the open; pick a later moment`);
+    }
+    cover = { ...manifest.COVER_FRAME_DEFAULTS, ...m.cover, kind: "frame", frameSec: Number((frameSec ?? 0).toFixed(3)) };
+  } else if (m.cover) {
+    if (!m.cover.hook) problems.push("cover.hook is empty — write the hook line for the frame-0 card (or remove cover)");
+    if (m.cover.portrait && !existsSync(manifest.resolveIn(projectDir, m.cover.portrait))) {
+      problems.push(`cover portrait not found at ${m.cover.portrait}`);
+    }
+    cover = { kind: "card", ...manifest.COVER_DEFAULTS, accent: m.brand?.colors?.primary || "#5B8DEF", ...m.cover };
+  }
+
   if (problems.length) {
     const msg = `Cannot render yet:\n  - ${problems.join("\n  - ")}`;
     if (!lenient) throw new Error(msg);
@@ -240,6 +310,7 @@ export async function buildProps(projectDir, { lenient = false, name = manifest.
     music: m.music,
     captions: m.captions,
     watermark: m.watermark,
+    cover,
     transitions: m.transitions || [],
     timeline,
   };

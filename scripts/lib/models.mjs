@@ -200,18 +200,31 @@ export function estimateCost(m) {
     const engine = AVATAR[Object.keys(AVATAR).find((k) => AVATAR[k].endpoint === m.presenter?.engine)] ||
       AVATAR.infinitalk;
     // Full presenter scenes plus demo scenes that need a talking clip (split
-    // bottom zone or face beats) — all bill avatar-seconds.
+    // bottom zone, face beats, or the mode-"always" corner pip) — all bill
+    // avatar-seconds. On a tutorial the pip is the dominant line item, so it is
+    // counted separately: the plan gate is where the user approves that spend.
+    const isPipScene = (s) =>
+      presenterMode === "always" && s.kind === "demo" &&
+      !s.beats?.length && s.pip !== false &&
+      s.bottom?.kind !== "presenter";
     const presenterScenes = (m.timeline || []).filter(
       (s) =>
         s.kind === "presenter" ||
         (s.kind === "demo" &&
-          (s.bottom?.kind === "presenter" || (s.beats || []).some((b) => b.shot === "face")))
+          (s.bottom?.kind === "presenter" ||
+            (s.beats || []).some((b) => b.shot === "face") ||
+            isPipScene(s)))
     );
     const presenterSec = presenterScenes.reduce((sum, s) => sum + (s.durationSec || 8), 0);
-    const bottomCount = presenterScenes.filter((s) => s.kind === "demo").length;
+    const pipCount = presenterScenes.filter(isPipScene).length;
+    const bottomCount = presenterScenes.filter((s) => s.kind === "demo" && !isPipScene(s)).length;
     if (presenterSec) {
       const usd = presenterSec * engine.approxUsdPerSecond;
-      const detail = `${Math.round(presenterSec)}s${bottomCount ? ` (incl. ${bottomCount} split bottom)` : ""}`;
+      const extras = [
+        bottomCount ? `${bottomCount} split bottom` : "",
+        pipCount ? `${pipCount} corner pip` : "",
+      ].filter(Boolean).join(", ");
+      const detail = `${Math.round(presenterSec)}s${extras ? ` (incl. ${extras})` : ""}`;
       lines.push({ item: "presenter", detail, usd });
       total += usd;
     }

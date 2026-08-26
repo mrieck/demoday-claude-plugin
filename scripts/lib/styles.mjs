@@ -6,10 +6,15 @@
  * caption style and transition policy at --init, and records itself on the
  * manifest so the skills can teach the matching beat sheet. Everything it
  * sets can still be overridden per scene.
+ *
+ * `coverLayout` is the frame-0 hook-card layout a vertical style scaffolds
+ * (manifest.COVER_LAYOUTS); each style defaults to a different one so Shorts of
+ * different styles never share a thumbnail silhouette. Null for landscape.
  */
 
 export const STYLES = {
   launch: {
+    coverLayout: null,
     aspect: "16:9",
     presenterMode: "hybrid",
     captionsStyle: "clean",
@@ -25,6 +30,7 @@ export const STYLES = {
     ],
   },
   anchor: {
+    coverLayout: null,
     aspect: "16:9",
     presenterMode: "always",
     captionsStyle: "clean",
@@ -38,7 +44,25 @@ export const STYLES = {
       "Keep demo scenes short — the face is the through-line",
     ],
   },
+  tutorial: {
+    coverLayout: null,
+    aspect: "16:9",
+    presenterMode: "always",
+    captionsStyle: "clean",
+    transitionPolicy: "cuts",
+    targetShotSec: null,
+    usesBeats: false,
+    oneLiner: "Step-by-step walkthrough: the full workflow on screen, the presenter riding along as a corner bubble.",
+    beatSheetHints: [
+      "Open with a 5-8s framing scene: what we are setting up and why, bubble talking over the app's start state",
+      "One scene per step, numbered in the narration ('Step two: paste your API key') — keep each step's narration under ~9.5s so the avatar clip (quantised to 5s/10s) never freezes",
+      "The screen is the hero: full-frame capture throughout, hard cuts between steps, no b-roll",
+      "Capture per step (default), or chop one continuous take with scene-level videoStartSec",
+      "Recap over the finished state, then a card with the CTA (cards never get a bubble)",
+    ],
+  },
   explainer: {
+    coverLayout: null,
     aspect: "16:9",
     presenterMode: "none",
     captionsStyle: "clean",
@@ -52,6 +76,7 @@ export const STYLES = {
     ],
   },
   listicle: {
+    coverLayout: "band",
     aspect: "9:16",
     presenterMode: "hybrid",
     captionsStyle: "boxed",
@@ -70,6 +95,7 @@ export const STYLES = {
     ],
   },
   cohost: {
+    coverLayout: "corner",
     aspect: "9:16",
     presenterMode: "hybrid",
     captionsStyle: "shorts",
@@ -83,6 +109,7 @@ export const STYLES = {
     ],
   },
   flashcard: {
+    coverLayout: "stack",
     aspect: "9:16",
     presenterMode: "none",
     captionsStyle: "boxed",
@@ -96,6 +123,7 @@ export const STYLES = {
     ],
   },
   glide: {
+    coverLayout: "stripe",
     aspect: "9:16",
     presenterMode: "none",
     captionsStyle: "shorts",
