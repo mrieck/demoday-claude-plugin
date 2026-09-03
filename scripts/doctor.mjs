@@ -155,7 +155,7 @@ async function run() {
     ok: Boolean(process.env.ELEVENLABS_API_KEY),
     detail: process.env.ELEVENLABS_API_KEY
       ? `set (from ${elevenSource})`
-      : "not set (custom character voice design disabled — narration uses fal.ai stock voices)",
+      : "not set (character voice design + sound effects disabled — narration uses fal.ai stock voices)",
     warn: elevenSource === "plugin .env"
       ? "a key in the plugin's own .env is lost when the plugin updates — move it to the Keychain"
       : null,

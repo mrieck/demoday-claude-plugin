@@ -56,7 +56,8 @@ timed to the narration word by word.*
 - 🧭 **Wide videos in named styles too** — `launch` (classic promo), `anchor`
   (avatar-led), `explainer` (no face), or `tutorial`: a step-by-step walkthrough
   with the full workflow on screen and the presenter riding along as a corner
-  bubble (circle or rounded square, any corner).
+  bubble — one continuous lip-synced take that stays up through every cut
+  (circle or rounded square, any corner; bottom-right by default).
 - 🗣️ **Custom character voices** — describe a voice in plain English
   (*"weathered lobster-boat captain, thick coastal accent"*) and the whole demo
   is narrated in it.
@@ -124,7 +125,11 @@ Same Keychain one-liner, different account name:
 
 - **`ELEVENLABS_API_KEY`** — unlocks custom character voices via
   [ElevenLabs Voice Design](https://try.elevenlabs.io/zecjglkbwy6x)
-  *(affiliate link)*. Needs a paid ElevenLabs plan (Starter and up): the free tier blocks voice
+  *(affiliate link)*, and **sound effects**: a per-project pack of cues
+  (whoosh, pop, hit, tick, riser) generated from text prompts and fired
+  automatically on transitions, insert cards, `#N` stamps, punch-ins and bullet
+  reveals — ~$0.02 a take, three takes per cue, pick your favourite. Needs a
+  paid ElevenLabs plan (Starter and up): the free tier blocks voice
   creation over the API, and a paid plan also carries the commercial license
   you'd want for a published video anyway.
 - **`BRAVE_API_KEY`** — lets b-roll generation search reference images.
@@ -157,6 +162,8 @@ own, e.g. `demo/project-overview/`).
 The interesting bits — the two-pass rehearse/perform design, narration-first
 pacing, the `demo.json` manifest, content-addressed caching, and everything about
 API-key resolution — live in [HOW_IT_WORKS.md](HOW_IT_WORKS.md).
+
+Meme-style cold opens (reaction clip + slow-mo cutout + freeze frame + music + push-in) are declared as a `composite` block on a scene and baked by `scripts/edit/composite.mjs`; `scripts/gen/fetch-audio.mjs` pulls a music cue with yt-dlp; `scripts/gen/sfx.mjs` designs the sound-effect pack and `scripts/lib/sfx.mjs` places every cue on the absolute timeline before the render. Every render rewrites `SCRIPT.md` from the manifest so downstream tools (cross-posting) always read the current cut.
 
 ## 📄 License notes
 

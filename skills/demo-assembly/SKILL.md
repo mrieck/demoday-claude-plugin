@@ -62,6 +62,46 @@ click — where the viewer is already looking.
 - A music bed ducks under narration automatically (`music.duckDb`, default −14 dB).
   Without ducking it sounds like a stock template.
 
+### Sound effects (optional — needs ELEVENLABS_API_KEY)
+
+Full-screen text moments — insert cards, `#N` stamps, bullet reveals, the cover
+wipe, face punch-ins — play in silence except for the voice, and that reads as
+a stall. A project-level `sfx` pack fixes it: named cues designed with
+ElevenLabs sound generation, fired automatically on events by style, with a
+per-event override anywhere.
+
+```jsonc
+"sfx": {
+  "enabled": true, "gain": 0.7, "duckDb": -6,          // master level; extra music duck under a cue
+  "cues": {                                             // name -> prompt (+ durationSec 0.5-30, gain)
+    "whoosh": { "prompt": "short fast air whoosh, dry", "durationSec": 0.6, "file": "audio/sfx/whoosh.mp3" },
+    "pop": { "prompt": "tiny bright UI pop", "durationSec": 0.5, "file": null }   // file:null = not generated yet
+  },
+  "auto": { "insert": "whoosh", "stamp": "pop", "face": "hit", "bullet": "tick",   // event -> cue (null = off)
+            "coverExit": "whoosh", "transition": "whoosh", "card": "riser", "sceneStart": null }
+}
+```
+
+- `plan.mjs --init --style <name>` scaffolds the pack (five default cues +
+  the style's event map) when the key is set; `gen/sfx.mjs --init` adds it to
+  an existing manifest. `gen/sfx.mjs --all` generates **3 candidates per cue**
+  (~$0.02 each), accepts #1, keeps the rest under `audio/sfx/previews/`;
+  `--cue whoosh --pick 2` swaps, `--cue whoosh --prompt "…" --force` redoes
+  one, `--add stinger --prompt "…"` defines a new cue. Accepted cues are
+  also stored per machine, so the default pack is designed once.
+- Overrides on any beat, transition, scene, bullet, or `cover`: `"sfx": "pop"`
+  (a cue), `"sfx": false` (silence), or `"sfx": { "cue": "hit", "gain": 0.5,
+  "offsetSec": -0.3 }` (pre-roll a riser). `bottom.sfx` sets the cue for a
+  whole bullet list. A `screen` beat is not an auto event but plays an
+  explicit cue.
+- Placement happens in `build-props` (`lib/sfx.mjs`), on the same absolute
+  timeline as narration, into `props.sfxTrack`; the template just plays it.
+  A missing cue file is a render error; `sfx.enabled: false` makes the audio
+  byte-identical to a project without the block.
+- `qa.mjs` warns above ~1 cue/second — set some `auto` events to `null`.
+- Template code changed for this: existing projects need one
+  `render.mjs --sync-template` to hear cues.
+
 ## Captions
 
 Driven by the word timings from `gen/tts.mjs`, grouped into short phrases with the

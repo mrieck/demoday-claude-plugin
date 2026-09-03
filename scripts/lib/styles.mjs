@@ -15,6 +15,7 @@
 export const STYLES = {
   launch: {
     coverLayout: null,
+    sfxAuto: { transition: "whoosh", card: "riser" },
     aspect: "16:9",
     presenterMode: "hybrid",
     captionsStyle: "clean",
@@ -31,6 +32,7 @@ export const STYLES = {
   },
   anchor: {
     coverLayout: null,
+    sfxAuto: { transition: "whoosh", card: "riser" },
     aspect: "16:9",
     presenterMode: "always",
     captionsStyle: "clean",
@@ -46,23 +48,37 @@ export const STYLES = {
   },
   tutorial: {
     coverLayout: null,
+    sfxAuto: { transition: "whoosh", card: "riser", bullet: "tick" },
     aspect: "16:9",
     presenterMode: "always",
+    // The bubble is ONE continuous lip-synced take laid under every cut
+    // (gen/presenter.mjs --take is what --all does for this style), so it
+    // never pops in/out between steps. Bottom-right: most apps put their
+    // primary content and navigation top-left. Zoom-to-click is off because
+    // the whole UI is the point of a walkthrough and the push-in crops it.
+    pip: { shape: "circle", position: "bottom-right", sizePct: 18 },
+    continuousPip: true,
+    zoomToClick: false,
+    // Avatar-seconds bill per second of finished video, and the bubble runs
+    // the whole length — so tutorials default short. A user can ask for more.
+    targetLengthSec: 75,
     captionsStyle: "clean",
     transitionPolicy: "cuts",
     targetShotSec: null,
     usesBeats: false,
     oneLiner: "Step-by-step walkthrough: the full workflow on screen, the presenter riding along as a corner bubble.",
     beatSheetHints: [
+      "Default length ~60-90s (the bubble bills avatar-seconds for the whole runtime); go longer only when the user asks",
       "Open with a 5-8s framing scene: what we are setting up and why, bubble talking over the app's start state",
-      "One scene per step, numbered in the narration ('Step two: paste your API key') — keep each step's narration under ~9.5s so the avatar clip (quantised to 5s/10s) never freezes",
-      "The screen is the hero: full-frame capture throughout, hard cuts between steps, no b-roll",
-      "Capture per step (default), or chop one continuous take with scene-level videoStartSec",
-      "Recap over the finished state, then a card with the CTA (cards never get a bubble)",
+      "One scene per step, numbered in the narration ('Step two: paste your API key'), ~5-9s each — short steps, quick cuts",
+      "The screen is the hero: full-frame capture throughout, hard cuts between steps, no b-roll, no zoom-to-click",
+      "Capture per step (default), or chop one continuous screen take with scene-level videoStartSec",
+      "Recap over the finished state, then a card with the CTA — the bubble stays up through the card",
     ],
   },
   explainer: {
     coverLayout: null,
+    sfxAuto: { insert: "whoosh", stamp: "pop", bullet: "tick", coverExit: "whoosh", transition: "whoosh", card: "riser" },
     aspect: "16:9",
     presenterMode: "none",
     captionsStyle: "clean",
@@ -77,6 +93,7 @@ export const STYLES = {
   },
   listicle: {
     coverLayout: "band",
+    sfxAuto: { insert: "whoosh", stamp: "pop", face: "hit", bullet: "tick", coverExit: "whoosh", transition: "whoosh", card: "riser" },
     aspect: "9:16",
     presenterMode: "hybrid",
     captionsStyle: "boxed",
@@ -96,6 +113,7 @@ export const STYLES = {
   },
   cohost: {
     coverLayout: "corner",
+    sfxAuto: { transition: "whoosh", coverExit: "whoosh", bullet: "tick", card: "riser" },
     aspect: "9:16",
     presenterMode: "hybrid",
     captionsStyle: "shorts",
@@ -110,6 +128,7 @@ export const STYLES = {
   },
   flashcard: {
     coverLayout: "stack",
+    sfxAuto: { insert: "whoosh", stamp: "pop", bullet: "tick", coverExit: "whoosh", transition: "whoosh", card: "riser" },
     aspect: "9:16",
     presenterMode: "none",
     captionsStyle: "boxed",
@@ -124,6 +143,7 @@ export const STYLES = {
   },
   glide: {
     coverLayout: "stripe",
+    sfxAuto: { transition: "whoosh", coverExit: "whoosh", card: "riser" },
     aspect: "9:16",
     presenterMode: "none",
     captionsStyle: "shorts",

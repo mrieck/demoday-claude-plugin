@@ -5,6 +5,8 @@
  *   node scripts/gen/presenter.mjs --project demo/<slug> --character   # make the face
  *   node scripts/gen/presenter.mjs --project demo/<slug> --all         # animate every presenter scene
  *   node scripts/gen/presenter.mjs --project demo/<slug> --scene intro
+ *   node scripts/gen/presenter.mjs --project demo/<slug> --take         # mode "always": ONE continuous
+ *                                                                        # corner-bubble take for the whole video
  *
  * TWO DECISIONS ARE BAKED IN HERE:
  *
@@ -22,20 +24,28 @@
  * presenter speaks in the same voice as the narration over the screen segments.
  */
 import path from "node:path";
-import { mkdir } from "node:fs/promises";
-import { existsSync } from "node:fs";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { existsSync, createReadStream } from "node:fs";
+import { createHash } from "node:crypto";
 import { parseArgs, boolArg } from "../lib/args.mjs";
 import { submitAndWait, extractUrl, download, toUrl } from "../lib/fal.mjs";
-import { probe } from "../lib/ff.mjs";
+import { probe, ffmpeg } from "../lib/ff.mjs";
 import { isContentRestrictionError } from "../lib/image.mjs";
 import * as manifest from "../lib/manifest.mjs";
 import * as cache from "../lib/cache.mjs";
 import { AVATAR, IMAGE, resolve } from "../lib/models.mjs";
 import { report, info, warn, main, fmtDuration } from "../lib/log.mjs";
 
+function sha256File(file) {
+  return new Promise((resolve, reject) => {
+    const h = createHash("sha256");
+    createReadStream(file).on("data", (d) => h.update(d)).on("end", () => resolve(h.digest("hex"))).on("error", reject);
+  });
+}
+
 const USAGE =
-  "presenter.mjs --project <dir> [--manifest <file>] (--character | --all | --scene <id>) " +
-  "[--engine infinitalk|kling-avatar|omnihuman] [--force]";
+  "presenter.mjs --project <dir> [--manifest <file>] (--character | --all | --scene <id> | --take [false]) " +
+  "[--engine infinitalk|kling-avatar|omnihuman] [--take-max-sec 120] [--force]";
 
 /**
  * Generate the presenter's face once.
@@ -159,7 +169,11 @@ await main(async () => {
     (s.bottom?.kind === "presenter" ||
       (s.beats || []).some((b) => b.shot === "face") ||
       (mode === "always" && !s.beats?.length && s.pip !== false));
-  const scenes = args.character
+  // presenter.continuousPip (seeded by the tutorial style) makes --all produce
+  // the continuous take; --take forces it, --take false forces per-scene clips.
+  const take = boolArg(args.take, boolArg(args.all, false) && mode === "always" && !!m.presenter?.continuousPip);
+  if (take && !args.take) info("  presenter.continuousPip is set — generating one continuous corner-bubble take (pass --take false for per-scene clips)");
+  const scenes = args.character || take
     ? []
     : args.all
       ? m.timeline.filter((s) => s.kind === "presenter" || wantsClip(s))
@@ -273,6 +287,130 @@ await main(async () => {
   const engine = args.engine ||
     Object.keys(AVATAR).find((k) => AVATAR[k].endpoint === m.presenter?.engine) ||
     "infinitalk";
+
+  // ---- one continuous take (--take) ----
+  // Per-scene pip clips each start from the portrait's rest pose, so the bubble
+  // visibly "resets" at every cut. A take is the alternative: every scene's
+  // narration, padded to its scene duration, is concatenated in timeline order
+  // and lip-synced as ONE clip, which the renderer plays straight through
+  // underneath the cuts. Scenes with `pip: false` are skipped (the take pauses
+  // there; the renderer hides the bubble). Cards are covered too — a persistent
+  // bubble that vanishes for the CTA card is exactly the pop the take exists to
+  // avoid. Engines cap the audio they accept, so the take is chunked at scene
+  // boundaries to --take-max-sec; one chunk seam is far better than ten.
+  if (take) {
+    if (mode !== "always") throw new Error(`--take needs presenter.mode "always" (it is "${mode}")`);
+    if ((m.transitions || []).length) {
+      warn("--take assumes hard cuts; overlapping transitions will drift the bubble's lip-sync by the overlap.");
+    }
+    const covered = m.timeline.filter((s) => s.pip !== false && (s.durationSec || 0) > 0);
+    if (!covered.length) throw new Error("--take: no scenes with a duration — run gen/tts.mjs --all first");
+    const missing = covered.filter((s) => !s.audio && s.kind !== "card");
+    for (const s of missing) warn(`scene "${s.id}" has no narration audio — the bubble will hold a silent pose there.`);
+
+    // Absolute start of every covered scene on the hard-cut timeline.
+    let cursor = 0;
+    const ranges = [];
+    for (const s of m.timeline) {
+      const d = s.durationSec || 0;
+      if (s.pip !== false && d > 0) ranges.push({ scene: s, fromSec: cursor, durationSec: d });
+      cursor += d;
+    }
+    // Chunk at scene boundaries: contiguous scenes only, total <= maxSec.
+    // kling-avatar has taken a 73s take in one clip; the ceiling is not
+    // documented, so a refused long chunk falls back to 60s chunks below.
+    const maxSec = Number(args["take-max-sec"] || 120);
+    const chunks = [];
+    for (const r of ranges) {
+      const last = chunks[chunks.length - 1];
+      const contiguous = last && Math.abs(last.toSec - r.fromSec) < 0.01;
+      if (contiguous && last.durationSec + r.durationSec <= maxSec) {
+        last.ranges.push(r); last.durationSec += r.durationSec; last.toSec = r.fromSec + r.durationSec;
+      } else {
+        chunks.push({ ranges: [r], fromSec: r.fromSec, toSec: r.fromSec + r.durationSec, durationSec: r.durationSec });
+      }
+    }
+    if (chunks.length > 1) {
+      info(`  take: ${fmtDuration(cursor)} of narration in ${chunks.length} chunk(s) (max ${maxSec}s each) — the bubble re-poses at each chunk seam`);
+    }
+
+    const audioDir = path.join(projectDir, "audio");
+    const clipsDir = path.join(projectDir, "clips");
+    await mkdir(audioDir, { recursive: true });
+    await mkdir(clipsDir, { recursive: true });
+    const portrait = await bottomPortrait();
+    const segments = [];
+    for (const [ci, chunk] of chunks.entries()) {
+      // Each scene's narration padded (or trimmed) to exactly its scene duration,
+      // so the take stays in phase with the picture at every cut.
+      const inputs = [];
+      const filters = [];
+      chunk.ranges.forEach((r, i) => {
+        const src = r.scene.audio ? manifest.resolveIn(projectDir, r.scene.audio) : null;
+        if (src) {
+          inputs.push("-i", src);
+          filters.push(`[${inputs.length / 2 - 1}:a]aresample=44100,apad,atrim=0:${r.durationSec.toFixed(3)},asetpts=N/SR/TB[a${i}]`);
+        } else {
+          filters.push(`anullsrc=r=44100:cl=mono,atrim=0:${r.durationSec.toFixed(3)},asetpts=N/SR/TB[a${i}]`);
+        }
+      });
+      const concat = chunk.ranges.map((_, i) => `[a${i}]`).join("") + `concat=n=${chunk.ranges.length}:v=0:a=1[out]`;
+      const suffix = chunks.length > 1 ? `-${ci + 1}` : "";
+      const audioAbs = path.join(audioDir, `pip-take${suffix}.mp3`);
+      // The avatar cache is keyed on the audio file's bytes, and an mp3 encode
+      // is not byte-stable run to run — so only rebuild the take audio when
+      // its inputs (the scene narrations and their padded lengths) changed.
+      // Otherwise a plain re-run would regenerate (and re-bill) the take.
+      const recipe = JSON.stringify(await Promise.all(chunk.ranges.map(async (r) => ({
+        id: r.scene.id, d: r.durationSec,
+        audio: r.scene.audio ? await sha256File(manifest.resolveIn(projectDir, r.scene.audio)) : null,
+      }))));
+      const recipeAbs = `${audioAbs}.recipe.json`;
+      const fresh = existsSync(audioAbs) && existsSync(recipeAbs) && (await readFile(recipeAbs, "utf8")) === recipe;
+      if (!fresh) {
+        await ffmpeg([...inputs, "-filter_complex", [...filters, concat].join(";"), "-map", "[out]", "-ac", "1", "-b:a", "128k", audioAbs]);
+        await writeFile(recipeAbs, recipe);
+      }
+
+      const videoAbs = path.join(clipsDir, `pip-take${suffix}.mp4`);
+      info(`  take${suffix}: animating ${fmtDuration(chunk.durationSec)} corner bubble (${engine}, scenes ${chunk.ranges[0].scene.id} → ${chunk.ranges[chunk.ranges.length - 1].scene.id})…`);
+      let r;
+      try {
+        r = await animate({
+          projectDir, imageFile: portrait, audioFile: audioAbs, outFile: videoAbs, engine,
+          prompt: m.presenter?.presenterPrompt || null, force,
+        });
+      } catch (e) {
+        if (!isContentRestrictionError(e) && chunk.durationSec > 60 && !args["take-max-sec"]) {
+          warn(`${engine} refused a ${chunk.durationSec.toFixed(0)}s take (${e.message}); retrying in chunks of 60s.`);
+          process.argv.push("--take-max-sec", "60");
+          const { spawnSync } = await import("node:child_process");
+          const rr = spawnSync(process.execPath, process.argv.slice(1), { stdio: "inherit" });
+          process.exit(rr.status ?? 1);
+        }
+        throw e;
+      }
+      const meta = await probe(r.path).catch(() => null);
+      info(`    ${r.cached ? "cached" : "generated"} ${fmtDuration(meta?.duration)} -> ${manifest.relativeIn(projectDir, r.path)}`);
+      if (meta?.duration && meta.duration + 0.05 < chunk.durationSec) {
+        warn(`take${suffix} came back ${meta.duration.toFixed(1)}s for ${chunk.durationSec.toFixed(1)}s of audio — the bubble will freeze at the tail.`);
+      }
+      segments.push({
+        video: manifest.relativeIn(projectDir, r.path),
+        audio: manifest.relativeIn(projectDir, audioAbs),
+        fromSec: +chunk.fromSec.toFixed(3),
+        durationSec: +chunk.durationSec.toFixed(3),
+        videoDurationSec: meta?.duration ?? null,
+        scenes: chunk.ranges.map((x) => x.scene.id),
+      });
+    }
+    m.presenter.pipTake = { segments };
+    await manifest.save(projectDir, m, { name });
+    return report(
+      `  presenter: continuous corner-bubble take ready (${segments.length} segment(s), engine: ${engine})`,
+      { ok: true, engine, mode, take: m.presenter.pipTake }
+    );
+  }
 
   if (!scenes.length) {
     return report("  no presenter scenes in the timeline", { ok: true, generated: 0 });

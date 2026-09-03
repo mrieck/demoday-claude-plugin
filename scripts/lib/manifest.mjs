@@ -14,6 +14,7 @@ import { readFile, writeFile, mkdir, rename, open, unlink, stat } from "node:fs/
 import { existsSync } from "node:fs";
 import path from "node:path";
 import { STYLES, STYLE_NAMES } from "./styles.mjs";
+import { SFX_EVENTS, referencedCues, missingCues } from "./sfx.mjs";
 
 export const MANIFEST_NAME = "demo.json";
 
@@ -675,6 +676,32 @@ export function validate(manifest) {
 
   for (const t of manifest.transitions || []) {
     if (t.after && !seen.has(t.after)) push(errors, `transition references unknown scene "${t.after}"`);
+  }
+
+  // Sound effects: the cue pack must be self-consistent before anything is
+  // generated, and a cue still without a file is a warning (gen/sfx.mjs), not
+  // a render error — build-props refuses at render time if it is still missing.
+  const sfx = manifest.sfx;
+  if (sfx && typeof sfx === "object" && sfx.enabled !== false) {
+    if (sfx.gain != null && !(sfx.gain >= 0 && sfx.gain <= 1)) push(errors, "sfx.gain must be between 0 and 1");
+    for (const [name, c] of Object.entries(sfx.cues || {})) {
+      const at = `sfx.cues.${name}`;
+      if (!c || typeof c !== "object") { push(errors, `${at}: must be an object with a prompt`); continue; }
+      if (!c.file && !c.prompt) push(errors, `${at}: needs a prompt to generate from, or an existing file`);
+      if (c.durationSec != null && !(c.durationSec >= 0.5 && c.durationSec <= 30)) {
+        push(errors, `${at}: durationSec must be 0.5-30 (the ElevenLabs sound-generation range)`);
+      }
+      if (c.gain != null && !(c.gain >= 0 && c.gain <= 1)) push(errors, `${at}: gain must be between 0 and 1`);
+    }
+    for (const [event, v] of Object.entries(sfx.auto || {})) {
+      if (!SFX_EVENTS.includes(event)) push(warnings, `sfx.auto.${event}: unknown event — one of ${SFX_EVENTS.join(" | ")}`);
+      if (v != null && typeof v !== "string") push(errors, `sfx.auto.${event}: must be a cue name or null`);
+    }
+    for (const name of referencedCues(manifest)) {
+      if (!sfx.cues?.[name]) push(errors, `sfx cue "${name}" is referenced but not defined in sfx.cues`);
+    }
+    const missing = missingCues(manifest).filter((n) => referencedCues(manifest).includes(n));
+    if (missing.length) push(warnings, `sfx cues not generated yet: ${missing.join(", ")} — run gen/sfx.mjs --all`);
   }
 
   return { ok: errors.length === 0, errors, warnings };

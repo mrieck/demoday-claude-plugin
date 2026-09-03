@@ -72,7 +72,21 @@ Anything that exists only in your context is lost on the next run.
   // shape "circle" (default) | "square", position any corner (default
   // bottom-left), sizePct 10-40 (% of frame width, default 22).
   // "presenter": { "mode": "always", "pip": { "shape": "circle", "position": "bottom-left", "sizePct": 22 }, ... },
+  // presenter.continuousPip: true (seeded by --style tutorial) makes
+  // gen/presenter.mjs --all produce ONE continuous bubble take instead of
+  // per-scene clips; it writes presenter.pipTake — segments laid on the
+  // absolute timeline ([{ video, fromSec, durationSec }]) that the renderer
+  // plays straight through underneath the cuts.
+  // "zoomToClick": false at the top level turns the click push-in off for every
+  // demo scene (tutorial default); a scene's own zoomToClick wins.
   "music": { "enabled": false, "bed": "assets/bed.mp3", "duckDb": -14 },
+  // Optional sound-effect pack (needs ELEVENLABS_API_KEY): named cues fired on
+  // events — insert, stamp, face, bullet, coverExit, transition, card,
+  // sceneStart. Any beat/transition/scene/bullet overrides with
+  // "sfx": "pop" | false | { "cue", "gain", "offsetSec" }. See demo-assembly § Audio.
+  // "sfx": { "enabled": true, "gain": 0.7, "duckDb": -6,
+  //          "cues": { "whoosh": { "prompt": "short fast air whoosh, dry", "durationSec": 0.6, "file": null } },
+  //          "auto": { "insert": "whoosh", "stamp": "pop", "face": "hit", "transition": "whoosh" } },
   // style: "clean" (pill near the bottom edge) or "shorts" (big centered
   // karaoke for vertical cuts — see the demo-shorts skill)
   "captions": { "enabled": true, "style": "clean" },
@@ -163,6 +177,16 @@ picture hard-cuts between windows:
 `transitions[].type` is `fade`, `wipe` or `slide`. They **overlap** the scenes they
 join, so the finished video is shorter than the sum of its scenes — the renderer
 accounts for this, but keep it in mind when hitting a target length.
+
+### Composite scenes (memes, layered clips)
+
+A `demo` scene may carry a `composite` block instead of a capture: a plate
+image, positioned video/image layers (slow-mo, crop, alpha cutouts, freeze on
+the last frame, a layer's own audio), a timed push-in and a music cue.
+`scripts/edit/composite.mjs --scene <id>` bakes it to `clips/<id>.mp4` and
+patches the scene. Full field list in that script's header; recipe in the
+**demo-shorts** skill (§2c). Give any scene without narration a `note` — it is
+what SCRIPT.md (regenerated on every render) says about it.
 
 ## Writing b-roll prompts
 

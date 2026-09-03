@@ -2,6 +2,7 @@ import React from "react";
 import { AbsoluteFill, OffthreadVideo, Img, staticFile, useCurrentFrame, useVideoConfig, interpolate, spring } from "remotion";
 import { DemoClip } from "./DemoClip.jsx";
 import { typeScale } from "../theme.js";
+import { bulletAppearSec } from "../lib/timing.js";
 
 /**
  * The split layout — the house style for a vertical Short cut from a landscape
@@ -83,7 +84,7 @@ const BottomBullets = ({ bottom, scene, theme, fps, width, height, zoneH }) => {
       }}
     >
       {items.map((b, i) => {
-        const appearSec = b.atSec ?? ((i + 1) * durationSec) / (items.length + 1);
+        const appearSec = bulletAppearSec(b, i, items.length, durationSec);
         const enter = spring({
           frame: frame - Math.round(appearSec * fps),
           fps,

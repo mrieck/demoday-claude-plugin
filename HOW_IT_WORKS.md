@@ -135,6 +135,20 @@ twice — and narration text goes to the configured TTS provider (fal, or
 api.elevenlabs.io directly). `scripts/qa.mjs` scans narration, typed text and
 visible URLs for anything credential-shaped before you publish.
 
+## ElevenLabs sound effects
+
+With the same key, `scripts/gen/sfx.mjs` calls `POST /v1/sound-generation`
+(`eleven_text_to_sound_v2`) to design a project's cue pack — ~200 credits
+(≈$0.02) per take, three takes per cue, the first accepted and the rest kept
+under `audio/sfx/previews/` for `--pick`. Each take is trimmed of leading
+silence, faded and loudness-normalised (−16 LUFS) with ffmpeg so cues sit at
+a predictable level under the voice. Takes are content-cached per project
+(`.cache.json`, kind `sfx`) and accepted cues are copied to
+`~/.config/demoday/sfx/` keyed by prompt + duration, so the default pack is
+generated once per machine. Placement (`scripts/lib/sfx.mjs`) runs in
+`build-props`, on the same absolute frame timeline as narration, so the
+template only ever plays a flat `sfxTrack`.
+
 ## ElevenLabs voice management
 
 Custom character voices use ElevenLabs Voice Design, which requires a paid plan

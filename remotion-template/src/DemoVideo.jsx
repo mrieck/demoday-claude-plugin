@@ -39,7 +39,7 @@ export function totalFrames(props, fps) {
   return Math.max(1, sum - overlap);
 }
 
-const SceneBody = ({ scene, theme, fps, presenterMode, pipVideo, pipDefaults, split }) => {
+const SceneBody = ({ scene, theme, fps, presenterMode, pipVideo, pipDefaults, pipTake, split }) => {
   switch (scene.kind) {
     case "demo": {
       if (scene.beats?.length) return <BeatScene scene={scene} theme={theme} fps={fps} presenterMode={presenterMode} />;
@@ -47,7 +47,9 @@ const SceneBody = ({ scene, theme, fps, presenterMode, pipVideo, pipDefaults, sp
       // The corner pip prefers the scene's own lip-synced clip (the tutorial
       // model) over the legacy global presenter.pipVideo; pip: false opts a
       // scene out, a pip object overrides the manifest-level config.
-      const pipClip = scene.pip === false ? null : scene.presenterVideo || pipVideo;
+      // With a continuous take (presenter.pipTake) the bubble is a persistent
+      // layer over the whole timeline instead — see DemoVideo below.
+      const pipClip = scene.pip === false || pipTake ? null : scene.presenterVideo || pipVideo;
       const pipConf = { ...pipDefaults, ...(typeof scene.pip === "object" ? scene.pip : null) };
       return (
         <>
@@ -96,6 +98,13 @@ export const DemoVideo = (props) => {
 
   const total = totalFrames(props, fps);
 
+  // A continuous corner-bubble take (gen/presenter.mjs --take): one lip-synced
+  // clip per chunk, laid on the absolute timeline above the scenes so the
+  // bubble never pops in and out at a cut. Only the first segment animates in.
+  const pipTake = presenterMode === "always" && props.presenter?.pipTake?.segments?.length
+    ? props.presenter.pipTake.segments
+    : null;
+
   // The watermark covers contiguous runs of scenes that have not opted out with
   // `watermark: false` (a CTA card whose logo it would sit on, say). Runs are
   // computed on the same absolute timeline as the audio, and adjacent scenes
@@ -129,6 +138,7 @@ export const DemoVideo = (props) => {
                 presenterMode={presenterMode}
                 pipVideo={props.presenter?.pipVideo}
                 pipDefaults={props.presenter?.pip || {}}
+                pipTake={pipTake}
                 split={scene.kind === "demo" && framingFor(scene, width, height) === "split"}
               />
             </TransitionSeries.Sequence>,
@@ -185,6 +195,18 @@ export const DemoVideo = (props) => {
         );
       })}
 
+      {pipTake
+        ? pipTake.map((seg, i) => {
+            const from = secToFrames(seg.fromSec, fps);
+            const frames = Math.min(secToFrames(seg.durationSec, fps), Math.max(0, total - from));
+            return (
+              <Sequence key={`pip-${i}`} from={from} durationInFrames={frames}>
+                <PresenterPip video={seg.video} theme={theme} pip={props.presenter?.pip || {}} animateIn={i === 0} />
+              </Sequence>
+            );
+          })
+        : null}
+
       {wmRuns.map((r) => (
         <Sequence key={`wm-${r.from}`} from={r.from} durationInFrames={r.to - r.from}>
           <Watermark watermark={wm} theme={theme} fps={fps} runFrames={r.to - r.from} />
@@ -213,17 +235,29 @@ export const DemoVideo = (props) => {
         </Sequence>
       ))}
 
+      {/* Sound effects: build-props placed every cue on this same absolute
+          timeline (lib/sfx.mjs), so a whoosh lands on the cut it belongs to
+          regardless of transition overlap. Each cue is one short Sequence. */}
+      {(props.sfxTrack || []).map((c, i) => (
+        <Sequence key={`sfx-${i}`} from={c.atFrame} durationInFrames={Math.max(1, Math.min(c.frames, total - c.atFrame))}>
+          <Audio src={staticFile(c.file)} volume={Math.max(0, Math.min(1, (c.gain ?? 1) * (props.sfx?.gain ?? 0.7)))} />
+        </Sequence>
+      ))}
+
       {props.music?.enabled && props.music.bed ? (
         <Audio
           src={staticFile(props.music.bed)}
           loop
           // Duck under narration. Without this the bed competes with the voice and
-          // the whole thing sounds like a stock template.
+          // the whole thing sounds like a stock template. Cues duck it a little
+          // further so a whoosh is not buried in the bed.
           volume={(f) => {
             const speaking = audioTrack.some((a) => f >= a.from && f < a.from + a.frames);
+            const cueing = (props.sfxTrack || []).some((c) => f >= c.atFrame && f < c.atFrame + c.frames);
             const base = props.music.gain ?? 0.5;
-            const ducked = base * Math.pow(10, (props.music.duckDb ?? -14) / 20);
-            return speaking ? ducked : base;
+            let v = speaking ? base * Math.pow(10, (props.music.duckDb ?? -14) / 20) : base;
+            if (cueing) v *= Math.pow(10, (props.sfx?.duckDb ?? -6) / 20);
+            return v;
           }}
         />
       ) : null}

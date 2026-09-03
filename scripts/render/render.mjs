@@ -22,6 +22,7 @@ import * as manifest from "../lib/manifest.mjs";
 import { buildProps } from "./build-props.mjs";
 import { probe } from "../lib/ff.mjs";
 import { report, info, warn, main, fmtDuration } from "../lib/log.mjs";
+import { writeScript } from "../script-md.mjs";
 
 const PLUGIN_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 const TEMPLATE = path.join(PLUGIN_ROOT, "remotion-template");
@@ -141,6 +142,12 @@ await main(async () => {
     );
   }
 
+  // SCRIPT.md is what other tools (cross-posting) read to describe the video;
+  // regenerate its narration block from the manifest so it never lags the cut.
+  const scriptFile = await manifest.load(projectDir, { name })
+    .then((m) => writeScript(projectDir, m, { rendered: new Date().toLocaleDateString("en-CA") }))
+    .catch((e) => (warn(`SCRIPT.md not updated: ${e.message}`), null));
+
   report(
     `  done: ${outFile} (${fmtDuration(meta?.duration)}, ${meta?.width}x${meta?.height})`,
     {
@@ -151,6 +158,7 @@ await main(async () => {
       height: meta?.height ?? null,
       scenes: props.timeline.length,
       cover: coverFile,
+      script: scriptFile,
     }
   );
 });

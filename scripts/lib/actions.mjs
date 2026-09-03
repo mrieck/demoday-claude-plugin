@@ -188,7 +188,7 @@ export function validate(script) {
     if (s.type === "goto" && !s.url) errors.push(`${at}: goto needs a url`);
     if (s.type === "type" && !s.text) errors.push(`${at}: type needs text`);
     if (s.type === "key" && !s.key) errors.push(`${at}: key needs a key name`);
-    if (["click", "hover", "highlight"].includes(s.type) && !s.selectors?.length && !s.point) {
+    if (["click", "hover", "highlight"].includes(s.type) && !s.selectors?.length && !s.point && !s.windowPoint) {
       errors.push(`${at}: ${s.type} needs a selector or a point`);
     }
     if (s.type === "waitStable" && s.minMs != null && s.maxMs != null &&

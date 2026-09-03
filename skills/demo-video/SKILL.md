@@ -85,7 +85,11 @@ Use AskUserQuestion. The answers change the whole shape of the video:
 
 - **Goal and audience** — a launch trailer, an onboarding walkthrough, and an
   investor demo are different videos.
-- **Length** — 30s, 60s, 2min. Default to 60s. (Shorts: 15–45s.)
+- **Length** — 30s, 60s, 2min. Default to 60s; tutorials default to ~60–90s.
+  Length is the cost driver: narration, avatar and b-roll all bill per second,
+  and a corner-bubble style bills avatar-seconds for the *whole* runtime. Say
+  so, default short, and let the user override — a 5-minute walkthrough is
+  fine if that is what they want. (Shorts: 15–45s.)
 - **Presenter mode** — see below; the style already picked a default.
 - **Voice** — *only if doctor showed `ELEVENLABS_API_KEY` set*: offer a custom
   character voice designed from a prose description ("weathered New England
@@ -141,22 +145,41 @@ A tutorial is the how-to alternative to the promotional styles: the screen is th
 hero the whole way through, with the presenter riding along as a corner bubble.
 Init with `plan.mjs --init --style tutorial` and follow these rules:
 
+What the style seeds (all overridable in `demo.json`):
+
+- `presenter.pip = { shape: "circle", position: "bottom-right", sizePct: 18 }` —
+  bottom-right because most apps keep navigation and primary content top-left.
+- `presenter.continuousPip = true` — the bubble is **one continuous lip-synced
+  take** for the whole video (`gen/presenter.mjs --all` does this automatically
+  for the style; it is the same as `--take`). Every scene's narration is padded
+  to its scene length and concatenated, then animated once, and the renderer
+  plays that clip straight through underneath the cuts. No pop-in/pop-out at
+  every step, no frozen bubble at scene tails, same avatar-seconds as per-scene
+  clips. kling-avatar handled a 73s take in one clip; `--take-max-sec` (default
+  120) chunks longer takes at scene boundaries, and a refused long take
+  automatically retries as 60s chunks. `--take false` gives the old
+  per-scene clips.
+- `zoomToClick = false` manifest-wide — the 1.18× push-in crops the sidebar,
+  and in a walkthrough the whole UI is the point. Set it per scene to re-enable.
+- Short by default: **~60–90s**. Avatar-seconds bill for the entire runtime in
+  this style, so tell the user what a longer cut costs and let them choose.
+
+Then follow these rules:
+
 - **One scene per step**, numbered in the narration ("Step two: paste your API
-  key"). No presenter scenes, no b-roll — demo scenes back to back, hard cuts
-  (the style seeds an empty `transitions` list; keep it that way), then a card
-  with the CTA. Cards and `pip: false` scenes never get a bubble.
-- **Keep each step's narration under ~9.5s.** The avatar engine quantises clips
-  to 5s or 10s, so a scene ≈ narration + breath is always covered; a longer
-  scene freezes the bubble at the tail. If build-props warns "the speaker will
-  freeze", split the step into two scenes or shorten the line — that is an
-  editing note, not a render bug.
+  key"), ~5–9s each — short steps, quick cuts. No presenter scenes, no b-roll —
+  demo scenes back to back, hard cuts (the style seeds an empty `transitions`
+  list; keep it that way), then a card with the CTA. The bubble stays up through
+  the card; `pip: false` on a scene hides it there.
 - **Capture per step** with the normal rehearse/perform flow (default), **or**
-  record one continuous take of the whole workflow and chop it: give every scene
-  the same `video` and a scene-level `videoStartSec` marking where its step
-  begins in the take.
-- Pip clips are per-scene and lip-synced, so `always` mode bills avatar-seconds
-  for every demo scene — the plan gate shows this as its own "corner pip" count.
-  Approve the estimate before generating.
+  record one continuous screen take of the whole workflow and chop it: give
+  every scene the same `video` and a scene-level `videoStartSec` marking where
+  its step begins in the take.
+- Terminal steps (a Claude Code session, a CLI) can be self-playing HTML
+  replay pages captured as `target: web` when a real terminal cannot be driven
+  — feed them the real output, never invented results.
+- The plan gate shows the bubble as its own "corner pip" line. Approve the
+  estimate before generating.
 
 Existing projects keep their scaffolded Remotion app: an older `anchor`/`always`
 project only gains the corner bubble after `render.mjs --sync-template` (which
@@ -197,6 +220,25 @@ Know these three behaviours:
 - **Voice slots are quota-limited** on the ElevenLabs account. `--list` shows
   what exists; `--delete <voice_id>` frees a slot when a character is retired.
 - **`--use <voice_id>`** adopts an existing account voice with no design spend.
+
+### 3.6 Sound effects (optional — needs ELEVENLABS_API_KEY)
+
+Transitions, cards and bullet reveals get a small cue (whoosh / riser / tick)
+from a project `sfx` pack designed with ElevenLabs sound generation. With the
+key set, `plan.mjs --init --style` scaffolds the pack and the estimate shows a
+`sound effects` line (~$0.02 per take, 3 takes per cue); after the script is
+final:
+
+```bash
+node scripts/gen/sfx.mjs --project demo/<slug> --all          # generate, accept take #1 of each
+node scripts/gen/sfx.mjs --project demo/<slug> --cue whoosh --pick 2   # prefer another take
+```
+
+Everything else is automatic — the renderer places cues on the events the
+style wires (`sfx.auto`), and any scene/transition/beat can say `"sfx": false`
+or name a different cue. Details in the demo-assembly skill § Audio. Landscape
+styles only wire transitions and cards; the beat-heavy Shorts styles wire
+inserts, stamps and punch-ins too.
 
 ## 4. Narration first
 

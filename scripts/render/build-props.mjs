@@ -25,6 +25,7 @@ import { parseArgs } from "../lib/args.mjs";
 import * as manifest from "../lib/manifest.mjs";
 import { probe } from "../lib/ff.mjs";
 import { minSceneDuration, gapAfter, transitionAfterSec } from "../lib/pacing.mjs";
+import { buildSfxTrack } from "../lib/sfx.mjs";
 import { report, info, warn, main, fmtDuration } from "../lib/log.mjs";
 
 const USAGE = "build-props.mjs --project <dir> [--manifest <file>] [--out <props.json>] [--lenient]";
@@ -155,7 +156,10 @@ export async function buildProps(projectDir, { lenient = false, name = manifest.
     // meaningfully shorter than the scene freezes at the tail (the avatar engine
     // quantises to 5s/10s): the fix is editorial — split the step or shorten the
     // narration — so say that.
-    if (m.presenter?.mode === "always" && scene.kind === "demo" &&
+    // A continuous take (presenter.pipTake, from presenter.mjs --take) replaces
+    // the per-scene clips entirely, so their checks do not apply.
+    const hasTake = !!m.presenter?.pipTake?.segments?.length;
+    if (m.presenter?.mode === "always" && !hasTake && scene.kind === "demo" &&
         !scene.beats?.length && !scene.bottom && scene.framing !== "split" && scene.pip !== false) {
       const abs = scene.presenterVideo ? manifest.resolveIn(projectDir, scene.presenterVideo) : null;
       if (!abs || !existsSync(abs)) {
@@ -206,6 +210,10 @@ export async function buildProps(projectDir, { lenient = false, name = manifest.
         }
       }
     }
+
+    // Manifest-level zoomToClick (false for walkthrough styles) is the default
+    // for every demo scene that does not decide for itself.
+    if (scene.kind === "demo" && scene.zoomToClick == null && m.zoomToClick === false) out.zoomToClick = false;
 
     // Inline the event log so DemoClip can zoom toward clicks.
     if (scene.events) {
@@ -296,6 +304,22 @@ export async function buildProps(projectDir, { lenient = false, name = manifest.
     cover = { kind: "card", ...manifest.COVER_DEFAULTS, accent: m.brand?.colors?.primary || "#5B8DEF", ...m.cover };
   }
 
+  // Sound effects, placed on the same absolute timeline the composition lays
+  // narration on (see lib/sfx.mjs). The renderer just plays the track.
+  let sfx = null;
+  let sfxTrack = [];
+  if (m.sfx && m.sfx.enabled !== false) {
+    const fps = m.format?.fps || 30;
+    const built = await buildSfxTrack(m, {
+      timeline, cover, fps, projectDir,
+      probeSec: async (abs) => (await probe(abs).catch(() => null))?.duration || null,
+    });
+    problems.push(...built.problems);
+    sfxTrack = built.track;
+    sfx = { gain: m.sfx.gain ?? 0.7, duckDb: m.sfx.duckDb ?? -6 };
+    if (sfxTrack.length) info(`  ${sfxTrack.length} sound-effect cue(s) on the timeline`);
+  }
+
   if (problems.length) {
     const msg = `Cannot render yet:\n  - ${problems.join("\n  - ")}`;
     if (!lenient) throw new Error(msg);
@@ -311,6 +335,8 @@ export async function buildProps(projectDir, { lenient = false, name = manifest.
     captions: m.captions,
     watermark: m.watermark,
     cover,
+    sfx,
+    sfxTrack,
     transitions: m.transitions || [],
     timeline,
   };

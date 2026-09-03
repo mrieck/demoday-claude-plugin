@@ -49,6 +49,10 @@ export const TTS = {
 export const ELEVENLABS = {
   ttsUsdPer1kChars: 0.22, // UNVERIFIED
   designUsdPerRun: 0.25,  // UNVERIFIED
+  // ~200 credits per generation when the model picks the length; 40 credits/s
+  // when duration_seconds is fixed (so a 0.6s whoosh is cheaper than the flat
+  // rate). Priced at the flat rate to err high. UNVERIFIED.
+  sfxUsdPerGeneration: 0.02,
 };
 
 /**
@@ -251,6 +255,18 @@ export function estimateCost(m) {
     const usd = insertStills * 0.05;
     lines.push({ item: "insert stills", detail: `${insertStills} image(s)`, usd });
     total += usd;
+  }
+
+  // Sound-effect cues still to be generated: N candidates each (gen/sfx.mjs
+  // defaults to 3), first auto-accepted. Cues with a file are free.
+  if (m.sfx && m.sfx.enabled !== false) {
+    const missing = Object.values(m.sfx.cues || {}).filter((c) => c && !c.file).length;
+    if (missing) {
+      const candidates = m.sfx.candidates ?? 3;
+      const usd = missing * candidates * ELEVENLABS.sfxUsdPerGeneration;
+      lines.push({ item: "sound effects", detail: `${missing} cue(s) x${candidates}`, usd });
+      total += usd;
+    }
   }
 
   const demoCount = (m.timeline || []).filter((s) => s.kind === "demo").length;

@@ -214,16 +214,94 @@ exactly like the card (`--cover-only`), and still vary the moment per video.
 No `hook`/`layout`/`portrait` apply. Existing projects need one render with
 `--sync-template` to pick the mode up.
 
+## 2c. Meme cold opens — `composite` scenes
+
+Engagement-bait Shorts often open on a *meme*: a reaction clip with its own
+audio, a cutout in slow motion on a themed plate, a freeze on the last frame
+while a music cue plays, a push-in on a face. None of that is a capture —
+declare it as a `composite` block on a plain `demo` scene and let
+`scripts/edit/composite.mjs` bake the clip with ffmpeg:
+
+```jsonc
+{ "id": "s-meme", "kind": "demo", "target": "web", "framing": "cover",
+  "note": "Sacks: a ban is coming; freeze, sad violin, push-in on Chamath",   // shows up in SCRIPT.md
+  "composite": {
+    "durationSec": 6.3,
+    "size": "frame",                                   // or "pane" for the top of an anchored split, or [w,h]
+    "plate": { "image": "assets/meme/hall.png", "brightness": -0.05 },
+    "layers": [
+      { "src": "../meme/chamath-cutout.webm", "speed": 0.44, "crop": [1200,1080,290,0],
+        "fit": { "h": 1000 }, "at": ["center", -40], "freezeEnd": true },       // alpha webm, slow-mo
+      { "src": "../meme/sacks.mp4", "region": [0,960,1080,960], "audio": true, "freezeEnd": true }
+    ],
+    "zoom":  { "fromSec": 2.8, "toSec": 6.1, "factor": 1.95, "focus": [540,420], "ease": "out" },
+    "music": { "src": "assets/meme/sad-violin.wav", "atSec": 2.6, "fadeInSec": 0.4, "gain": 1.1, "fadeOutSec": 0.5 }
+  } }
+```
+
+```bash
+node scripts/gen/still.mjs      --project demo/<slug> --manifest shorts.json --out assets/meme/hall.png --prompt "empty marble hallway inside the US Capitol, dusk, no people"
+node scripts/gen/fetch-audio.mjs --project demo/<slug> --url <youtube url> --out assets/meme/sad-violin.wav --duration 8 --trim-silence
+node scripts/edit/composite.mjs  --project demo/<slug> --manifest shorts.json --scene s-meme
+```
+
+`composite.mjs` writes `clips/<id>.mp4` and patches the scene (`video`,
+`durationSec` when there is no narration, `muteSource: false` when audio was
+mixed, `captions: false`). Rules that follow from the renderer:
+
+- A composite **with audio** must be a plain `demo` scene — beats and
+  presenter bottoms are always muted.
+- To put a slow-mo cutout above the presenter, use `size: "pane"` on an
+  anchored scene (the clip is built at the top-pane size, so `focus`/`at`
+  are in pane pixels) — the closer of the open-source-ban Short does this.
+- Zoom is pixel-sharp: the canvas is built at 2× and cropped back, so a 2×
+  push-in on a 1080p cutout loses nothing. Keep `factor` ≤ 2.
+- Hand the presenter the **hook line about the meme** ("Why does it look like
+  Chamath is about to cry?") in an anchored scene whose top pane is the
+  reaction clip (a plain `video`, cropped/slowed with ffmpeg or a `size:
+  "pane"` composite), then cut to the meme scene. Cover: none — frame 0 of
+  that open is the thumbnail, and a frozen-frame cover hides the first caption.
+- `fetch-audio.mjs` retries yt-dlp through a cookie ladder (bare → default
+  Chrome → `DEMODAY_YTDLP_COOKIES` / the SocialCue Chrome profile) because
+  YouTube bot-checks bare downloads. Rights are on you.
+
+## 2d. Sound effects — the cuts should be heard
+
+A listicle's insert cards, `#N` stamps and punch-ins are the slow, text-only
+moments; a whoosh on the card, a pop on the stamp and a hit on the punch-in are
+what make them read as cuts. When `ELEVENLABS_API_KEY` is set, `--init --style`
+scaffolds an `sfx` pack (listicle/flashcard: every event wired; cohost/glide:
+transitions, cover exit and bullets only). Generate it once per project:
+
+```bash
+node scripts/gen/sfx.mjs --project demo/<slug> --manifest shorts.json --all      # 3 takes per cue, #1 accepted
+node scripts/gen/sfx.mjs --project demo/<slug> --manifest shorts.json --cue pop --pick 2   # swap a take
+```
+
+Then, per beat, tune with `"sfx": false` (a stamp on a beat that already has
+a face hit), `"sfx": "hit"`, or `"sfx": { "cue": "riser", "offsetSec": -0.8 }`
+on the beat *before* the closer so the riser lands on it. Keep it under one
+cue a second — `qa.mjs` warns past that. Schema and event list: demo-assembly
+skill § Audio. Existing projects: `render.mjs --sync-template` once.
+
 ## 3. Generate, render, QA
 
 ```bash
 node scripts/gen/tts.mjs       --project demo/<slug> --manifest shorts.json --all
 node scripts/gen/presenter.mjs --project demo/<slug> --manifest shorts.json --all   # face beats / split bottoms
 node scripts/gen/broll.mjs     --project demo/<slug> --manifest shorts.json --all   # stills auto-generate at 9:16
+node scripts/gen/sfx.mjs       --project demo/<slug> --manifest shorts.json --all   # sound-effect cues (ElevenLabs key)
 node scripts/render/render.mjs --project demo/<slug> --manifest shorts.json --cover-only   # preview frame 0
 node scripts/render/render.mjs --project demo/<slug> --manifest shorts.json
 node scripts/qa.mjs            --project demo/<slug> --manifest shorts.json
 ```
+
+Every render also rewrites the generated block of `SCRIPT.md` (narration in
+order, no-narration scenes called out, watermark, cover) from the manifest —
+that file is what the cross-posting agent reads, so it must never describe a
+dropped scene. Hand-written notes outside the `<!-- demoday:script -->`
+markers survive; put a "removed from earlier drafts" list there when a cut
+changes a lot. Give no-narration scenes a `note` so the block can describe them.
 
 Output: `out/<slug>.mp4` at 1080×1920 plus `out/<slug>-cover.png` (frame 0,
 the thumbnail). If the project's Remotion app predates these features (any

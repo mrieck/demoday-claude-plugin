@@ -121,7 +121,7 @@ export async function type(text, { cps = 14 } = {}) {
   for (const { ch, delayMs } of plan) {
     if (ch === "\n") {
       await flush();
-      await cliclick("kp:return");
+      await cliclick("kp:return", "w:30");
       await motion.sleep(delayMs);
       continue;
     }
@@ -156,8 +156,12 @@ export async function key(spec) {
   if (mods.length) await cliclick(`kd:${mods.join(",")}`);
   try {
     const mapped = KEY_MAP[base];
-    if (mapped) await cliclick(`kp:${mapped}`);
-    else await cliclick(`t:${base}`);
+    // cliclick 5.1 exits before a lone key-press event is delivered, so a
+    // standalone `kp:` silently does nothing (verified: `kp:return` alone never
+    // reached Terminal; `kp:return w:20` always did). The trailing wait keeps
+    // the process alive until the event posts.
+    if (mapped) await cliclick(`kp:${mapped}`, "w:30");
+    else await cliclick(`t:${base}`, "w:30");
   } finally {
     if (mods.length) await cliclick(`ku:${mods.join(",")}`).catch(() => {});
   }

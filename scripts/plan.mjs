@@ -16,6 +16,8 @@ import { parseArgs, boolArg } from "./lib/args.mjs";
 import * as manifest from "./lib/manifest.mjs";
 import { STYLES, STYLE_NAMES } from "./lib/styles.mjs";
 import { estimateCost } from "./lib/models.mjs";
+import { scaffoldSfx } from "./lib/sfx.mjs";
+import { hasElevenLabs } from "./lib/elevenlabs.mjs";
 import { report, info, warn, main, fmtDuration } from "./lib/log.mjs";
 
 const USAGE =
@@ -88,6 +90,17 @@ await main(async () => {
       m.captions = { enabled: true, style: style.captionsStyle };
       // Cut-driven styles carry no scene transitions; the beats do the cutting.
       if (style.transitionPolicy === "cuts") m.transitions = [];
+      // Corner-bubble styles seed the bubble's look and whether it is one
+      // continuous take; walkthrough styles turn the click push-in off
+      // manifest-wide (a scene can still set its own zoomToClick).
+      if (style.pip) m.presenter.pip = structuredClone(style.pip);
+      if (style.continuousPip) m.presenter.continuousPip = true;
+      if (style.zoomToClick === false) m.zoomToClick = false;
+      // Sound-effect pack: the style's event map plus the default cues, files
+      // not generated yet (gen/sfx.mjs --all). Only when ElevenLabs is set up —
+      // a project that cannot generate cues should not carry a block that
+      // build-props will refuse to render.
+      if (style.sfxAuto && hasElevenLabs()) m.sfx = scaffoldSfx(style.sfxAuto);
     }
     // Vertical cuts scaffold a frame-0 hook card (the thumbnail every platform
     // shows). hook is left empty on purpose: validate() refuses to render until

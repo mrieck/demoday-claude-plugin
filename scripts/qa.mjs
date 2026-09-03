@@ -25,6 +25,7 @@ import { parseArgs } from "./lib/args.mjs";
 import * as manifest from "./lib/manifest.mjs";
 import { STYLES } from "./lib/styles.mjs";
 import { probe, extractFrames } from "./lib/ff.mjs";
+import { referencedCues, buildSfxTrack } from "./lib/sfx.mjs";
 import { report, info, warn, main, fmtDuration } from "./lib/log.mjs";
 
 const USAGE = "qa.mjs --project <dir> [--manifest <file>] [--video <file>] [--fps 0.5] [--skip-frames]";
@@ -119,6 +120,23 @@ await main(async () => {
   const pending = manifest.pending(projectDir, m);
   for (const p of pending) {
     issues.push(`scene "${p.sceneId}" still needs: ${p.needs.join(", ")}`);
+  }
+
+  // Sound effects: every referenced cue must have a file, and a track denser
+  // than ~one cue per second is over-sweetened — cut some auto events.
+  if (m.sfx && m.sfx.enabled !== false) {
+    for (const name of referencedCues(m)) {
+      const c = m.sfx.cues?.[name];
+      if (!c?.file) issues.push(`sfx cue "${name}" has no file — run gen/sfx.mjs --all`);
+      else if (!existsSync(manifest.resolveIn(projectDir, c.file))) issues.push(`sfx cue "${name}" file missing (${c.file})`);
+    }
+    const fps = m.format?.fps || 30;
+    const { track } = await buildSfxTrack(m, { timeline: m.timeline, cover: m.cover, fps, projectDir, probeSec: null });
+    const runtime = manifest.totalDuration(m) || 1;
+    if (track.length / runtime > 1) {
+      issues.push(`sfx: ${track.length} cues over ${fmtDuration(runtime)} — more than one per second reads as noise; set some sfx.auto events to null`);
+    }
+    info(`  ${track.length} sound-effect cue(s) placed`);
   }
 
   // ---- frames for visual review -------------------------------------------

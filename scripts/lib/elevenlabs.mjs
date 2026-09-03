@@ -35,6 +35,9 @@ export const DESIGN_MODEL = "eleven_ttv_v3";
 export const TTS_MODEL = "eleven_v3";
 export const TTS_FALLBACK_MODEL = "eleven_multilingual_v2";
 
+/** Text-to-sound-effects model (the only one the endpoint accepts, 2026-08). */
+export const SFX_MODEL = "eleven_text_to_sound_v2";
+
 /** Is the optional key configured? Never exits — for feature-gating. */
 export function hasElevenLabs() {
   loadSecrets();
@@ -189,6 +192,32 @@ export async function ttsWithTimestamps({ voiceId, text, modelId = TTS_MODEL, st
   );
   if (!data?.audio_base64) throw new Error(`ElevenLabs TTS returned no audio for voice ${voiceId}`);
   return { audioBase64: data.audio_base64, alignment: data.alignment || data.normalized_alignment || null };
+}
+
+/**
+ * Generate one sound effect from a prose prompt. Returns the raw mp3 bytes.
+ *
+ *   POST /v1/sound-generation  { text, duration_seconds?, prompt_influence?, loop?, model_id }
+ *
+ * duration_seconds 0.5-30 (omit to let the model pick — cheaper: a flat ~200
+ * credits vs 40 credits/second); prompt_influence 0-1 (0.3 default; higher is
+ * more literal). Every call is a new random take, so callers wanting
+ * candidates simply call this N times.
+ */
+export async function generateSoundEffect({ text, durationSec, promptInfluence, loop = false }) {
+  const prompt = String(text || "").trim();
+  if (!prompt) throw new Error("sound effect prompt is empty");
+  const body = { text: prompt, model_id: SFX_MODEL };
+  if (durationSec != null) {
+    const d = Number(durationSec);
+    if (!(d >= 0.5 && d <= 30)) throw new Error(`sound effect duration must be 0.5-30s, got ${durationSec}`);
+    body.duration_seconds = d;
+  }
+  if (promptInfluence != null) body.prompt_influence = Math.min(1, Math.max(0, Number(promptInfluence)));
+  if (loop) body.loop = true;
+  const bytes = await api("/v1/sound-generation?output_format=mp3_44100_128", { method: "POST", body, binary: true });
+  if (!bytes?.length) throw new Error("ElevenLabs returned no audio for the sound effect");
+  return bytes;
 }
 
 /** All voices on the account. Returns [{ voiceId, name, category, description }]. */

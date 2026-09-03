@@ -19,12 +19,16 @@ const POSITIONS = {
   "bottom-right": (m) => ({ right: m, bottom: m }),
 };
 
-export const PresenterPip = ({ video, theme, pip = {}, startFromSec = 0 }) => {
+export const PresenterPip = ({ video, theme, pip = {}, startFromSec = 0, animateIn = true }) => {
   const frame = useCurrentFrame();
   const { fps, width, height } = useVideoConfig();
   const scale = typeScale(width, height);
 
-  const enter = spring({ frame, fps, config: { damping: 200 }, durationInFrames: Math.round(fps * 0.5) });
+  // A continuous take (presenter.pipTake) keeps the bubble on screen across
+  // cuts, so only its very first segment animates in.
+  const enter = animateIn
+    ? spring({ frame, fps, config: { damping: 200 }, durationInFrames: Math.round(fps * 0.5) })
+    : 1;
   const size = Math.round((width * (pip.sizePct ?? 22)) / 100);
   const margin = Math.round(height * 0.05);
   const place = (POSITIONS[pip.position] || POSITIONS["bottom-left"])(margin);

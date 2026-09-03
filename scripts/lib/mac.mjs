@@ -88,9 +88,18 @@ export function hostApp() {
  * rather than assuming 2x — see capture/screenshot.mjs.
  */
 export async function desktopBounds() {
-  const raw = await osa('tell application "Finder" to get bounds of window of desktop');
-  const [x1, y1, x2, y2] = raw.split(",").map((n) => Number(n.trim()));
-  return { x: x1, y: y1, width: x2 - x1, height: y2 - y1 };
+  // Finder cannot report the desktop while its desktop is hidden (CreateDesktop
+  // = false — exactly the state a crashed staging leaves behind), so fall back
+  // to AppKit's main screen via JXA rather than failing to stage at all.
+  try {
+    const raw = await osa('tell application "Finder" to get bounds of window of desktop');
+    const [x1, y1, x2, y2] = raw.split(",").map((n) => Number(n.trim()));
+    if ([x1, y1, x2, y2].every(Number.isFinite) && x2 > x1) return { x: x1, y: y1, width: x2 - x1, height: y2 - y1 };
+  } catch {}
+  const { stdout } = await execFileAsync("osascript", ["-l", "JavaScript", "-e",
+    'ObjC.import("AppKit"); const f=$.NSScreen.mainScreen.visibleFrame, s=$.NSScreen.mainScreen.frame; ' +
+    'JSON.stringify({x:f.origin.x, y:s.size.height-(f.origin.y+f.size.height), width:f.size.width, height:f.size.height})']);
+  return JSON.parse(stdout.trim());
 }
 
 /** Every visible app with at least one window: [{ app, windows: [{ title, x, y, w, h }] }] */
