@@ -14,7 +14,7 @@ import { BRollClip } from "./scenes/BRollClip.jsx";
 import { Card } from "./scenes/Card.jsx";
 import { Captions } from "./components/Captions.jsx";
 import { Watermark } from "./components/Watermark.jsx";
-import { HookCard, FrameCover } from "./components/HookCard.jsx";
+import { HookCard, FrameCover, BandOverlay } from "./components/HookCard.jsx";
 import { themeFrom } from "./theme.js";
 
 const PRESENTATIONS = { fade, wipe, slide };
@@ -222,7 +222,7 @@ export const DemoVideo = (props) => {
   const visual = renderVisual();
 
   const coverFrames = props.cover
-    ? secToFrames((props.cover.holdSec ?? 0.5) + (props.cover.kind === "frame" ? (props.cover.outSec ?? 0) : (props.cover.outSec ?? 0.5)), fps)
+    ? secToFrames((props.cover.holdSec ?? 0.5) + (props.cover.kind === "frame" ? (props.cover.outSec ?? 0) : props.cover.kind === "overlay" ? (props.cover.outSec ?? 0.4) : (props.cover.outSec ?? 0.5)), fps)
     : 0;
 
   return (
@@ -270,6 +270,13 @@ export const DemoVideo = (props) => {
               {props.cover.captions === false ? renderVisual({ captions: false }) : visual}
             </Freeze>
           </FrameCover>
+        </Sequence>
+      ) : props.cover?.kind === "overlay" && props.cover.hook ? (
+        <Sequence from={0} durationInFrames={coverFrames}>
+          {/* The real first frames play underneath; captions are hidden for the
+              band's life so frame 0 is not a mid-phrase box under a band. */}
+          {props.cover.captions === false ? renderVisual({ captions: false }) : null}
+          <BandOverlay cover={props.cover} theme={theme} fps={fps} />
         </Sequence>
       ) : props.cover?.hook ? (
         <Sequence from={0} durationInFrames={coverFrames}>

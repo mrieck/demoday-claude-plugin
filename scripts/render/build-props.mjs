@@ -296,6 +296,12 @@ export async function buildProps(projectDir, { lenient = false, name = manifest.
       warn(`cover.atSec ${frameSec}s is inside the ${hold}s hold — the poster would be the same as the open; pick a later moment`);
     }
     cover = { ...manifest.COVER_FRAME_DEFAULTS, ...m.cover, kind: "frame", frameSec: Number((frameSec ?? 0).toFixed(3)) };
+  } else if (m.cover && m.cover.kind === "overlay") {
+    if (!m.cover.hook) problems.push("cover.hook is empty — write the hook line for the frame-0 band (or remove cover)");
+    if (m.cover.portrait && !existsSync(manifest.resolveIn(projectDir, m.cover.portrait))) {
+      problems.push(`cover portrait not found at ${m.cover.portrait}`);
+    }
+    cover = { ...manifest.COVER_OVERLAY_DEFAULTS, accent: m.brand?.colors?.primary || "#5B8DEF", ...m.cover, kind: "overlay" };
   } else if (m.cover) {
     if (!m.cover.hook) problems.push("cover.hook is empty — write the hook line for the frame-0 card (or remove cover)");
     if (m.cover.portrait && !existsSync(manifest.resolveIn(projectDir, m.cover.portrait))) {

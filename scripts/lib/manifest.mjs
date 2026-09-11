@@ -108,8 +108,18 @@ export const COVER_DEFAULTS = { layout: "stack", exit: "wipe-up", holdSec: 0.5, 
  *             reads as a glitch). Rotate the timestamp per video so the
  *             channel grid still varies.
  */
-export const COVER_KINDS = ["card", "frame"];
+export const COVER_KINDS = ["card", "frame", "overlay"];
 export const COVER_FRAME_DEFAULTS = { kind: "frame", exit: "cut", holdSec: 0.45, outSec: 0 };
+/**
+ *   "overlay" — the band: the video's REAL first frame is the background and is
+ *             already playing; an accent band carrying `hook` (+ `kicker`,
+ *             `portrait`) sits across `top`..`top+height` (fractions of the
+ *             frame, default 0.22..0.46 — inside every profile-grid crop and
+ *             over the demo pane of an anchored split, clear of the face),
+ *             holds `holdSec`, then slides up and off over `outSec`. Captions
+ *             are hidden while it is up. The listicle default.
+ */
+export const COVER_OVERLAY_DEFAULTS = { kind: "overlay", exit: "wipe-up", holdSec: 0.5, outSec: 0.4, top: 0.22, height: 0.24, captions: false };
 
 /** A fresh manifest with sane defaults. */
 export function blankManifest({ slug = "demo", name = "" } = {}) {
@@ -416,6 +426,75 @@ export function validate(manifest) {
       push(warnings, `style "${manifest.style}" is ${st.aspect} but the format is ${fmt.width}x${fmt.height}`);
     }
   }
+  // ---- style hard rules (listicle) ----------------------------------------
+  // The style catalog can carry `rules`; they are what separates a listicle
+  // that gets watched from one that reads as a slideshow. Timing rules need
+  // durations, so they only fire once TTS has run.
+  const rules = STYLES[manifest?.style]?.rules;
+  if (rules && Array.isArray(manifest?.timeline)) {
+    const tl = manifest.timeline;
+    const first = tl[0];
+    if (first) {
+      const fat = `timeline[0] "${first.id}"`;
+      if (first.kind === "presenter" && (first.durationSec == null || first.durationSec > rules.hookCutSec)) {
+        push(warnings, `${fat}: the hook is a face-only scene${first.durationSec ? ` (${first.durationSec}s)` : ""} — ` +
+          `the ${manifest.style} style cuts to a visual within ${rules.hookCutSec}s. Make it an anchored demo scene with a screen top pane, ` +
+          `or keep it under ${rules.hookCutSec}s.`);
+      } else if (first.kind === "demo" && first.beats?.length) {
+        const firstPane = first.beats.find((b) => ["screen", "split"].includes(b.shot) || (b.shot === "insert" && (b.image || b.images)));
+        if (!firstPane) {
+          push(warnings, `${fat}: no screen beat in the hook — the ${manifest.style} style opens on a real screen`);
+        } else if (firstPane.atSec > rules.hookCutSec) {
+          push(warnings, `${fat}: first screen beat at ${firstPane.atSec}s — the hook cuts to a visual within ${rules.hookCutSec}s`);
+        }
+      } else if (first.kind === "card") {
+        push(warnings, `${fat}: opening on a card — the ${manifest.style} style opens on a real screen with the hook line`);
+      }
+    }
+    tl.forEach((scene, si) => {
+      const at = `timeline[${si}] "${scene.id}"`;
+      const isCloser = si >= tl.length - 2;
+      if (scene.kind === "demo" && Array.isArray(scene.beats) && scene.beats.length) {
+        scene.beats.forEach((b, bi) => {
+          const bat = `${at} beats[${bi}]`;
+          const end = bi < scene.beats.length - 1 ? scene.beats[bi + 1].atSec : scene.durationSec;
+          const win = end != null ? end - b.atSec : null;
+          if (b.shot === "insert" && rules.textOnlyInserts === false && !b.image && !b.images?.length && !b.prompt) {
+            push(errors, `${bat}: text-only insert ("${b.title || ""}") — the ${manifest.style} style bans title cards. ` +
+              `Put stamp/title on a screen beat instead ({ "shot": "screen", "stamp": "#N" }) or give the insert images.`);
+          }
+          if (b.shot === "insert" && win != null && win > rules.insertMaxSec) {
+            push(warnings, `${bat}: insert holds ${win.toFixed(1)}s — inserts are flashes (≤${rules.insertMaxSec}s) in the ${manifest.style} style`);
+          }
+          if (win != null && win > rules.maxShotSec && !(isCloser && bi === scene.beats.length - 1)) {
+            push(warnings, `${bat}: ${b.shot} window holds ${win.toFixed(1)}s — nothing holds past ${rules.maxShotSec}s in the ${manifest.style} style; add a cut (videoStartSec jump)`);
+          }
+        });
+      } else if (scene.kind !== "card" && scene.durationSec != null && scene.durationSec > rules.maxShotSec && !isCloser) {
+        push(warnings, `${at}: a ${scene.durationSec}s ${scene.kind} scene with no beats — that is one ${scene.durationSec}s shot; ` +
+          `the ${manifest.style} style cuts every ${STYLES[manifest.style].targetShotSec.join("-")}s. Add beats.`);
+      }
+    });
+    if (rules.oneCta) {
+      // One ask per video. A "comment WORD" in the narration plus a "Follow for
+      // more" card is two asks, and the second one dilutes the first.
+      const spoken = tl.map((sc) => sc.narration || "").join(" ").toLowerCase();
+      const asksComment = /\b(comment|dm me|dm the word|reply with)\b/.test(spoken);
+      const asksFollow = /\b(follow|subscribe)\b/.test(spoken) ||
+        tl.some((sc) => sc.kind === "card" && /\b(follow|subscribe)\b/i.test(`${sc.cta || ""} ${sc.subtitle || ""} ${sc.title || ""}`));
+      if (asksComment && asksFollow) {
+        push(errors, `two CTAs — the narration asks for a comment/DM AND something asks to follow/subscribe. One ask per video: keep the comment, drop the follow card (end on the closer).`);
+      }
+    }
+    if (rules.leadMagnetCta) {
+      const spoken = tl.map((sc) => sc.narration || "").join(" ").toLowerCase();
+      if (!/\b(comment|dm me|dm the word|reply with)\b/.test(spoken)) {
+        push(warnings, `no lead-magnet CTA in the narration — the ${manifest.style} style closes on "Comment WORD and I'll send you the link" ` +
+          `(comments drive reach); "follow for more" alone underperforms`);
+      }
+    }
+  }
+
   if (provider === "elevenlabs" && !manifest?.voice?.voiceId) {
     push(errors, 'voice.provider is "elevenlabs" but voice.voiceId is missing — run gen/voice-design.mjs');
   }
@@ -448,9 +527,24 @@ export function validate(manifest) {
           push(warnings, "cover is set on a landscape video — it exists for vertical Shorts, where platforms take frame 0 as the thumbnail");
         }
       } else if (!cover.hook || typeof cover.hook !== "string") {
-        push(errors, "cover.hook is required — the big text on the frame-0 card (this is the thumbnail every platform shows)");
+        push(errors, "cover.hook is required — the big text on frame 0 (this is the thumbnail every platform shows)");
       } else if (cover.hook.length > 60) {
         push(warnings, `cover.hook is ${cover.hook.length} chars — over 60 it wraps past three lines and shrinks below thumbnail-legible size`);
+      }
+      if (kind === "overlay") {
+        const top = cover.top ?? COVER_OVERLAY_DEFAULTS.top;
+        const h = cover.height ?? COVER_OVERLAY_DEFAULTS.height;
+        if (!(top >= 0 && top < 1) || !(h > 0 && h < 1)) push(errors, "cover.top and cover.height must be fractions of the frame height (0-1)");
+        else if (top < 0.12 || top + h > 0.78) {
+          push(warnings, `cover band spans ${Math.round(top * 100)}%–${Math.round((top + h) * 100)}% of the frame — outside ~12%–78% the profile grids (TikTok 3:4, Instagram 4:5) crop it off`);
+        }
+        if (cover.exit && !COVER_EXITS.includes(cover.exit)) {
+          push(errors, `cover.exit must be one of ${COVER_EXITS.join(" | ")}, got "${cover.exit}"`);
+        }
+        for (const k of ["holdSec", "outSec"]) {
+          if (cover[k] != null && !(cover[k] >= 0)) push(errors, `cover.${k} must be >= 0`);
+        }
+        if (cover.layout) push(warnings, "cover.layout only applies to cover.kind \"card\" — the band overlay ignores it");
       }
       if (kind === "card" && cover.layout && !COVER_LAYOUTS.includes(cover.layout)) {
         push(errors, `cover.layout must be one of ${COVER_LAYOUTS.join(" | ")}, got "${cover.layout}"`);
@@ -464,7 +558,8 @@ export function validate(manifest) {
       if (kind === "card") for (const k of ["holdSec", "outSec"]) {
         if (cover[k] != null && !(cover[k] >= 0)) push(errors, `cover.${k} must be >= 0`);
       }
-      const coverSec = kind === "card" ? (cover.holdSec ?? COVER_DEFAULTS.holdSec) + (cover.outSec ?? COVER_DEFAULTS.outSec) : 0;
+      const coverSec = kind === "card" ? (cover.holdSec ?? COVER_DEFAULTS.holdSec) + (cover.outSec ?? COVER_DEFAULTS.outSec)
+        : kind === "overlay" ? (cover.holdSec ?? COVER_OVERLAY_DEFAULTS.holdSec) + (cover.outSec ?? COVER_OVERLAY_DEFAULTS.outSec) : 0;
       if (coverSec > 2) {
         push(warnings, `cover holds ${coverSec}s before the first scene shows — a card past 2s is a logo-card open, not a hook`);
       }

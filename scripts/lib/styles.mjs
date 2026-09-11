@@ -93,22 +93,39 @@ export const STYLES = {
   },
   listicle: {
     coverLayout: "band",
+    coverKind: "overlay",   // the band over the real first frame, not a full card
     sfxAuto: { insert: "whoosh", stamp: "pop", face: "hit", bullet: "tick", coverExit: "whoosh", transition: "whoosh", card: "riser" },
     aspect: "9:16",
     presenterMode: "hybrid",
     captionsStyle: "boxed",
     transitionPolicy: "cuts",
-    targetShotSec: [0.9, 1.8],
+    targetShotSec: [0.9, 1.6],
+    // Hard rules measured against the strongest TikTok listicles (2026-09-10,
+    // ten top-performing creator Shorts, 17-24 shots in 28-37s): the screen is always
+    // moving under the text, the hook cuts away from the face inside a
+    // second, nothing holds longer than 2.5s, and text never sits on a blank
+    // card. validate() and qa.mjs enforce them.
+    rules: {
+      hookCutSec: 1.0,        // first cut to a visual (screen/insert-with-image) by this second
+      maxShotSec: 2.5,        // longest beat window / non-closer scene
+      insertMaxSec: 0.8,      // an insert (image spread) is a flash, not a card
+      textOnlyInserts: false, // insert beats must carry image(s); stamps/titles go OVER screen beats
+      leadMagnetCta: true,    // closer narration names a comment/DM word, not "follow for more"
+      oneCta: true,           // exactly one ask: a comment word means NO follow card / follow line
+    },
     usesBeats: true,
-    oneLiner: "Numbered rundown of 3-5 tools: anchored split home base (speaker below, demo cutting above), full-bleed face punch-ins, animated inserts, #N stamps.",
+    oneLiner: "Numbered rundown of 3-5 steps/tools: real screen recording cutting above, speaker below, #N stamps OVER the UI, never a text-only card.",
     beatSheetHints: [
-      "Home base: beatLayout 'anchored' + splitPct ~0.42 + bottom presenter (presenterFocusY '50% 22%') — demo cuts in the top pane while the speaker talks below; boxed captions ride the seam automatically",
-      "Anchor only 2-3 scenes (hook + one middle + closer) — the rest full-bleed screen/insert beats, which cost nothing",
-      "Face punch-ins are full-bleed and SHORT (0.6-2s), reserved for the revelation line ('it's your setup')",
-      "One numbered segment per tool: animated insert with title + stamp '#N', then screen cuts (pan framing is the default)",
-      "An insert can carry images: [2-5 stills] for the spread effect",
-      "Cut the top pane every 1.2-1.5s; captionEmphasis: pain words neg, payoff words pos",
-      "Face or anchored closer, then a ~4s CTA card",
+      "Hook: a claim with tension ('Claude just killed X', 'You're using X wrong'), never an announcement — anchored split, top pane on a real screen from second 0, face-only for at most 1s",
+      "Home base: beatLayout 'anchored' + splitPct ~0.42 + bottom presenter (presenterFocusY '50% 22%') — the top pane is a REAL recording of the tool running (terminal, app, browser being driven), not a website being scrolled",
+      "One numbered step per item: put stamp '#N' on the FIRST screen beat of the step (the numeral pops over the moving UI); no insert(title) cards — a title-only insert is a stall",
+      "Insert beats only as image spreads (2-5 stills) and only for ≤0.8s; a screen beat with a stamp does the job of a title card",
+      "Every step shows a PROOF: the command typed, the thing happening, the result on screen — say what to do, show it done",
+      "Cut the top pane every 0.9-1.6s (videoStartSec jumps to the best moments); no window over 2.5s except the closer",
+      "Face punch-ins are full-bleed and SHORT (0.6-2s): the revelation line and the CTA only",
+      "Closer is a FULL-SCREEN presenter scene (no split) with ONE ask: 'DM me the word DEMO and I'll send you the link. If you're on TikTok, the link's in my bio.' — never 'comment' (nothing answers comments), never a follow card or follow line after it (one CTA per video)",
+      "Cover is the band overlay (cover.kind 'overlay'): the real first frame plays underneath, the hook band sits over the demo pane at 22-46% and slides up after 0.5s",
+      "Boxed captions are 1-3 words at the seam; captionEmphasis: pain words neg, payoff words pos",
     ],
   },
   cohost: {

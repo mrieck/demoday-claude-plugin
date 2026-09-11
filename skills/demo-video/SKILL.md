@@ -221,24 +221,22 @@ Know these three behaviours:
   what exists; `--delete <voice_id>` frees a slot when a character is retired.
 - **`--use <voice_id>`** adopts an existing account voice with no design spend.
 
-### 3.6 Sound effects (optional — needs ELEVENLABS_API_KEY)
+### 3.6 Sound effects (opt-in only — never add them unless the user asks)
 
-Transitions, cards and bullet reveals get a small cue (whoosh / riser / tick)
-from a project `sfx` pack designed with ElevenLabs sound generation. With the
-key set, `plan.mjs --init --style` scaffolds the pack and the estimate shows a
-`sound effects` line (~$0.02 per take, 3 takes per cue); after the script is
-final:
+Sound effects are **off by default**. Do not scaffold, generate, or propose an
+`sfx` pack unless the user explicitly asks for sound effects. When they do,
+`plan.mjs --init --style <name> --sfx` (or `gen/sfx.mjs --init` on an existing
+manifest) adds the pack, the estimate shows a `sound effects` line (~$0.02 per
+take, 3 takes per cue), and after the script is final:
 
 ```bash
 node scripts/gen/sfx.mjs --project demo/<slug> --all          # generate, accept take #1 of each
 node scripts/gen/sfx.mjs --project demo/<slug> --cue whoosh --pick 2   # prefer another take
 ```
 
-Everything else is automatic — the renderer places cues on the events the
-style wires (`sfx.auto`), and any scene/transition/beat can say `"sfx": false`
-or name a different cue. Details in the demo-assembly skill § Audio. Landscape
-styles only wire transitions and cards; the beat-heavy Shorts styles wire
-inserts, stamps and punch-ins too.
+The renderer then places cues on the events the style wires (`sfx.auto`), and
+any scene/transition/beat can say `"sfx": false` or name a different cue.
+Details in the demo-assembly skill § Audio.
 
 ## 4. Narration first
 

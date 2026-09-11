@@ -62,8 +62,10 @@ click — where the viewer is already looking.
 - A music bed ducks under narration automatically (`music.duckDb`, default −14 dB).
   Without ducking it sounds like a stock template.
 
-### Sound effects (optional — needs ELEVENLABS_API_KEY)
+### Sound effects (opt-in only — never added unless the user asks; needs ELEVENLABS_API_KEY)
 
+Sound effects are off by default: do not add an `sfx` block or run
+`gen/sfx.mjs` unless the user explicitly asks for sound effects.
 Full-screen text moments — insert cards, `#N` stamps, bullet reveals, the cover
 wipe, face punch-ins — play in silence except for the voice, and that reads as
 a stall. A project-level `sfx` pack fixes it: named cues designed with
@@ -82,8 +84,8 @@ per-event override anywhere.
 }
 ```
 
-- `plan.mjs --init --style <name>` scaffolds the pack (five default cues +
-  the style's event map) when the key is set; `gen/sfx.mjs --init` adds it to
+- `plan.mjs --init --style <name> --sfx` scaffolds the pack (five default cues +
+  the style's event map) when the key is set — without `--sfx` no pack is added; `gen/sfx.mjs --init` adds it to
   an existing manifest. `gen/sfx.mjs --all` generates **3 candidates per cue**
   (~$0.02 each), accepts #1, keeps the rest under `audio/sfx/previews/`;
   `--cue whoosh --pick 2` swaps, `--cue whoosh --prompt "…" --force` redoes

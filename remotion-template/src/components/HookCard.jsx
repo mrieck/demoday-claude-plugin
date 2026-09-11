@@ -223,6 +223,60 @@ const Stripe = ({ cover, theme, s, width, height }) => (
 
 const LAYOUTS = { stack: Stack, band: Band, corner: Corner, stripe: Stripe };
 
+/**
+ * The band overlay (cover.kind "overlay"): NOT a card. The video's real first
+ * frame is the background and is already playing; a solid accent band with the
+ * hook sits across the upper-middle of the frame (over the demo pane of an
+ * anchored split, never over the presenter's face), holds for `holdSec`, then
+ * slides off. `top`/`height` are fractions of the frame height and default to
+ * the zone every platform's profile grid keeps (roughly 22%–46%), so the hook
+ * survives TikTok's 3:4 and Instagram's 4:5 grid crops. Captions are hidden
+ * underneath while the band is up (DemoVideo.jsx).
+ */
+export const BandOverlay = ({ cover, theme, fps }) => {
+  const frame = useCurrentFrame();
+  const { width, height } = useVideoConfig();
+  const s = typeScale(width, height);
+  const hold = Math.round((cover.holdSec ?? 0.5) * fps);
+  const out = Math.max(1, Math.round((cover.outSec ?? 0.4) * fps));
+  const p = interpolate(frame, [hold, hold + out], [0, 1], {
+    extrapolateLeft: "clamp", extrapolateRight: "clamp", easing: Easing.inOut(Easing.cubic),
+  });
+  const accent = /^#[0-9a-f]{6}$/i.test(cover.accent || "") ? cover.accent : theme.primary;
+  const top = (cover.top ?? 0.22) * height;
+  const bandH = (cover.height ?? 0.24) * height;
+  // Exit: the band leaves upward, off the top edge (the demo pane keeps moving
+  // underneath); slide-left / dissolve / cut also supported.
+  const exit = cover.exit === "slide-left" ? { transform: `translateX(${-width * p}px)` }
+    : cover.exit === "dissolve" ? { opacity: 1 - p }
+    : cover.exit === "cut" ? {}
+    : { transform: `translateY(${-(top + bandH) * p}px)` };
+  const portrait = Math.round(width * 0.16);
+  return (
+    <AbsoluteFill style={{ pointerEvents: "none", ...exit }}>
+      <div
+        style={{
+          position: "absolute",
+          left: 0, right: 0, top, height: bandH,
+          background: accent,
+          boxShadow: "0 24px 70px rgba(0,0,0,.45)",
+          display: "flex", alignItems: "center",
+          padding: `0 ${Math.round(width * 0.14)}px 0 ${Math.round(width * 0.07)}px`,
+          gap: Math.round(28 * s),
+        }}
+      >
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <Kicker text={cover.kicker} accent={theme.bg} s={s} font={theme.font} style={{ marginBottom: Math.round(14 * s), opacity: 0.8 }} />
+          <div style={{ font: `800 ${Math.round(hookPx(cover.hook, s) * 0.82)}px/1.04 ${theme.font}`, color: theme.bg, textAlign: "left", textWrap: "balance" }}>
+            {cover.hook}
+          </div>
+        </div>
+        <Portrait src={cover.portrait} accent={theme.bg} size={portrait} />
+      </div>
+    </AbsoluteFill>
+  );
+};
+
 export const HookCard = ({ cover, theme, fps }) => {
   const frame = useCurrentFrame();
   const { width, height } = useVideoConfig();

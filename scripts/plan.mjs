@@ -22,7 +22,7 @@ import { report, info, warn, main, fmtDuration } from "./lib/log.mjs";
 
 const USAGE =
   "plan.mjs --project <dir> [--manifest <file>] " +
-  "[--init --slug <slug> --name <product> [--from <file>] [--format 9:16] [--style listicle]]";
+  "[--init --slug <slug> --name <product> [--from <file>] [--format 9:16] [--style listicle] [--sfx]]";
 
 /** Preset dimensions for --format; fps stays 30 across all of them. */
 const FORMAT_PRESETS = {
@@ -97,16 +97,20 @@ await main(async () => {
       if (style.continuousPip) m.presenter.continuousPip = true;
       if (style.zoomToClick === false) m.zoomToClick = false;
       // Sound-effect pack: the style's event map plus the default cues, files
-      // not generated yet (gen/sfx.mjs --all). Only when ElevenLabs is set up —
-      // a project that cannot generate cues should not carry a block that
-      // build-props will refuse to render.
-      if (style.sfxAuto && hasElevenLabs()) m.sfx = scaffoldSfx(style.sfxAuto);
+      // not generated yet (gen/sfx.mjs --all). Strictly opt-in (--sfx): the
+      // author decided sound effects are off unless a video explicitly asks for
+      // them. Also only when ElevenLabs is set up — a project that cannot
+      // generate cues should not carry a block that build-props will refuse
+      // to render.
+      if (style.sfxAuto && boolArg(args.sfx, false) && hasElevenLabs()) m.sfx = scaffoldSfx(style.sfxAuto);
     }
     // Vertical cuts scaffold a frame-0 hook card (the thumbnail every platform
     // shows). hook is left empty on purpose: validate() refuses to render until
     // it is written, so a Short cannot ship with the presenter's face as its cover.
     if (vertical) {
-      m.cover = { hook: "", kicker: "", layout: style?.coverLayout || manifest.COVER_DEFAULTS.layout };
+      m.cover = style?.coverKind === "overlay"
+        ? { kind: "overlay", hook: "", kicker: "" }
+        : { hook: "", kicker: "", layout: style?.coverLayout || manifest.COVER_DEFAULTS.layout };
     }
 
     await manifest.save(projectDir, m, { name });

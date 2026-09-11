@@ -22,7 +22,7 @@ their video is most like:
 
 | style | feels like | mechanics |
 |---|---|---|
-| `listicle` | "5 plugins that fix your CSS" — numbered rundown, a cut every ~1.5s | beat engine: face/screen/split/insert windows, `#N` stamps, boxed captions |
+| `listicle` | "Claude just killed X, here's how" — numbered steps, the real tool running on screen, a cut every ~1.3s | beat engine: face/screen/split windows, `#N` stamps over the UI, boxed captions; hard rules (no title cards, hook cut ≤1s, no hold >2.5s) |
 | `cohost` | screenshare with a person talking below the demo throughout | split framing, steady scene-length pacing, karaoke captions |
 | `flashcard` | text asks, UI answers — big typographic cards alternating with full-bleed clips, no face | beat engine: insert(title)/screen windows, boxed captions |
 | `glide` | one immersive screen recording, the camera gliding to each click | pan framing, karaoke captions |
@@ -59,52 +59,77 @@ before generating.
 
 ### listicle — the numbered rundown
 
-The workhorse for "N plugins/tools that fix X". The grammar (modeled on the
-strongest TikTok listicles) has a **home base and two kinds of departure**:
+The workhorse for "N steps/tools that do X". The grammar is measured from the
+strongest TikTok listicles (28–37s, 17–24 shots, a cut every 1.3–1.7s, the
+screen always moving under the text) and has a **home base and two kinds of
+departure**:
 
 - **Home base — the anchored split.** `beatLayout: "anchored"` + `bottom:
   {kind: "presenter"}`: the speaker talks *continuously* in the bottom pane
-  while the demo hard-cuts in the top pane (`shot: "screen"` beats with
-  `videoStartSec` jumps). Boxed captions automatically ride the **seam**
-  between the panes. Use `splitPct` ~0.42 and `presenterFocusY "50% 22%"`
-  (the 9:16 portrait sits high in the squat zone).
-- **The punch-in.** A full-bleed `face` beat, 0.6–2s, reserved for the
-  revelation line ("it's your setup") — never for narration filler. Captions
-  drop to the lower third automatically.
-- **The full-screen moment.** `insert` beats (animated title + `stamp: "#N"`,
-  or `images: [2–5 stills]` for the spread effect) and full-bleed `screen`
-  beats with a mid-screen caption — for each numbered item's reveal.
+  while a **real recording of the tool running** hard-cuts in the top pane
+  (`shot: "screen"` beats with `videoStartSec` jumps). Boxed captions ride
+  the **seam**. `splitPct` ~0.42, `presenterFocusY "50% 22%"`.
+- **The punch-in.** A full-bleed `face` beat, 0.6–2s, for the revelation
+  line and the CTA — never for narration filler.
+- **The stamp over the UI.** Each numbered item starts with a *screen* beat
+  carrying `stamp: "#N"` — the numeral pops over the moving screen. Not a
+  title card.
+
+**Hard rules — `validate()` errors/warns and `qa.mjs` measures them:**
+
+| rule | limit | why |
+|---|---|---|
+| Hook cuts to a visual | ≤1.0s | a face-only open loses the swipe; the top pane shows a real screen from second 0 |
+| No text-only inserts | error | a title on a blank card is a stall; use `{ "shot": "screen", "stamp": "#N" }` |
+| Insert (image spread) window | ≤0.8s | inserts are flashes |
+| Any window / non-closer scene | ≤2.5s | nothing holds; avg target 0.9–1.6s |
+| Lead-magnet CTA in narration | warn | "DM me the word DEMO and I'll send you the link; on TikTok, link in bio" |
+| One CTA per video | error | a comment word plus a follow card/line is two asks; end on the closer |
+
+**What goes in the top pane:** the actual tool doing the thing — a terminal
+running the real command, the app being driven, the result appearing. A
+website being scrolled is not proof of anything; if the tool cannot be run,
+install it into a scratch folder and run it (cli scenes), or build the thing
+on screen. Every step says *what to do* in narration and *shows it done* on
+screen.
 
 **Cost rule (hybrid):** anchor only 2–3 scenes — hook, one middle beat, the
 closer. Anchored scenes and face beats need that scene's presenter clip
-(billed avatar-seconds); everything else is free. Structure (15–45s):
+(billed avatar-seconds); everything else is free. Structure (28–40s):
 
-1. **Hook (≤2s in)** — anchored: pain on the top pane, speaker below,
-   caption tagged `neg`.
-2. **Revelation** — full-bleed face punch-in: the claim.
-3. **Promise** — an animated insert(title) beat: "3 plugins".
-4. **One scene per tool** — insert with title + `stamp "#N"` → screen cuts
-   (`videoStartSec` to the best moments; pan framing is the default).
-5. **Closer** — anchored or face-beat payoff line.
-6. **CTA card** — ~4s, where to get them.
+1. **Hook (anchored)** — a claim with tension ("Claude just killed X",
+   "You're using X wrong"), never an announcement. Top pane: the proof
+   (the result) from second 0; speaker below; `neg` on the pain word.
+2. **One scene per step** — first screen beat carries `stamp "#N"`, then
+   1–3 more screen cuts (`videoStartSec` to the moments that matter: the
+   command typed → the thing happening → the result).
+3. **Revelation** — one full-bleed face punch-in on the twist line.
+4. **Closer** — anchored or face: the payoff + the lead-magnet word.
+5. **Closer = full-screen presenter, one ask.** A `presenter` scene (no
+   split — the split at the very end reads as an unfinished cut): the payoff
+   line, then "DM me the word DEMO and I'll send you the link. If you're on
+   TikTok, the link's in my bio." Say **DM**, not comment (a DM can be
+   answered by hand or by a keyword autoresponder; nothing answers
+   comments). No follow card and no "follow for more" after it —
+   `validate()` errors on two CTAs. A channel card is only for videos whose
+   single ask is the follow.
 
-Rules of the style: a cut every **1.2–1.5s** (`atSec` steps); hard cuts only
-(no scene transitions — `--style` already emptied them); boxed captions with
-`captionEmphasis` — tag pain words `neg`, payoff words `pos`:
+Rules of the style: a cut every **0.9–1.6s** (`atSec` steps); hard cuts only
+(no scene transitions — `--style` already emptied them); boxed captions (1–3
+words) with `captionEmphasis` — pain words `neg`, payoff words `pos`:
 
 ```jsonc
-{ "id": "s-p1", "kind": "demo", "target": "web",
-  "narration": "First: DemoDay. It records your app and cuts the video for you.",
-  "video": "clips/p1.mp4", "events": "clips/p1.events.json",
+{ "id": "s-1", "kind": "demo", "target": "cli", "cwd": "/path/to/scratch",
+  "narration": "One: install it. Two commands in your terminal, and Claude has the skill.",
+  "actions": "actions/s-1.json", "video": "clips/s-1.mp4",
   "beatLayout": "anchored", "splitPct": 0.42,
   "bottom": { "kind": "presenter" }, "presenterFocusY": "50% 22%",
-  "captionEmphasis": [ { "match": "records", "tone": "pos" }, { "match": "for you", "tone": "pos" } ],
+  "captionEmphasis": [ { "match": "two commands", "tone": "pos" } ],
   "beats": [
-    { "atSec": 0,   "shot": "insert", "title": "DemoDay", "stamp": "#1" },
-    { "atSec": 1.4, "shot": "screen" },
-    { "atSec": 2.8, "shot": "screen", "videoStartSec": 12 },
-    { "atSec": 4.4, "shot": "face" },
-    { "atSec": 5.8, "shot": "screen", "videoStartSec": 20 }
+    { "atSec": 0,   "shot": "screen", "stamp": "#1", "videoStartSec": 0.5 },
+    { "atSec": 1.3, "shot": "screen", "videoStartSec": 4.0 },
+    { "atSec": 2.6, "shot": "screen", "videoStartSec": 9.5 },
+    { "atSec": 3.8, "shot": "screen", "videoStartSec": 14.0 }
   ] }
 ```
 
@@ -143,12 +168,39 @@ detail *is* the story and cuts would cheapen it.
 
 TikTok uses frame 0 as the cover, Instagram's default `thumb_offset` is 0,
 Shorts grabs an early frame, and the posting API (Postiz) cannot override any
-of them. Whatever the first frame shows is what the channel grid shows. A run
-of Shorts that all open on the presenter's face reads as the same video posted
-eight times — so every Short declares a `cover`, a typographic hook card that
-**is** frame 0, holds 0.5s, then wipes away over the first scene while the
-narration is already running underneath (`--init` scaffolds it; `validate()`
-refuses to render until `hook` is written).
+of them. Whatever the first frame shows is what the channel grid shows.
+
+### The band overlay — `cover.kind: "overlay"` (listicle default)
+
+Not a card. The video's **real first frame** is the background and is already
+playing with the narration; a solid accent band carrying the hook sits across
+the upper-middle of the frame, holds 0.5s, then slides up and off. It reads
+like a creator's "text over the first frame" cover, not a title slide.
+
+```jsonc
+"cover": {
+  "kind": "overlay",
+  "hook": "Claude just killed video editors.",  // required, ≤60 chars
+  "kicker": "HERE'S HOW",                        // optional eyebrow inside the band
+  "accent": "#14B8A6",                           // defaults to brand.colors.primary
+  "portrait": "assets/cover-mark.png",           // optional small circle at the band's right
+  "top": 0.22, "height": 0.24,                   // fractions of frame height (defaults)
+  "holdSec": 0.5, "outSec": 0.4, "exit": "wipe-up"
+}
+```
+
+Rules that follow from the platforms: profile grids crop the 9:16 cover to
+~3:4 (TikTok) or 4:5 (Instagram), so the band must live inside ~12%–78% of
+the height — `validate()` warns outside that. The default 22%–46% sits over
+the **demo pane** of an anchored hook and leaves the presenter's face clear.
+Captions are hidden while the band is up (a mid-phrase box under a band
+reads as a glitch). Preview with `--cover-only` exactly like a card and make
+sure the first frame underneath is a real screen, not black.
+
+### The full card — `cover.kind: "card"` (cohost / flashcard / glide default)
+
+A typographic hook card that **is** frame 0, holds 0.5s, then wipes away over
+the first scene while the narration is already running underneath.
 
 ```jsonc
 "cover": {
@@ -265,23 +317,23 @@ mixed, `captions: false`). Rules that follow from the renderer:
   Chrome → `DEMODAY_YTDLP_COOKIES` / the SocialCue Chrome profile) because
   YouTube bot-checks bare downloads. Rights are on you.
 
-## 2d. Sound effects — the cuts should be heard
+## 2d. Sound effects — OFF unless the user explicitly asks
 
-A listicle's insert cards, `#N` stamps and punch-ins are the slow, text-only
-moments; a whoosh on the card, a pop on the stamp and a hit on the punch-in are
-what make them read as cuts. When `ELEVENLABS_API_KEY` is set, `--init --style`
-scaffolds an `sfx` pack (listicle/flashcard: every event wired; cohost/glide:
-transitions, cover exit and bullets only). Generate it once per project:
+Do **not** add sound effects to a Short unless the user asks for them by name
+("add sound effects", "add a whoosh on the cards"). `--init --style` never
+scaffolds an `sfx` pack on its own; do not run `gen/sfx.mjs`, do not add an
+`sfx` block, and do not suggest it in the plan or the review. When they are
+asked for, pass `--sfx` to `plan.mjs --init` (or `gen/sfx.mjs --init` on an
+existing manifest) and generate once per project:
 
 ```bash
 node scripts/gen/sfx.mjs --project demo/<slug> --manifest shorts.json --all      # 3 takes per cue, #1 accepted
 node scripts/gen/sfx.mjs --project demo/<slug> --manifest shorts.json --cue pop --pick 2   # swap a take
 ```
 
-Then, per beat, tune with `"sfx": false` (a stamp on a beat that already has
-a face hit), `"sfx": "hit"`, or `"sfx": { "cue": "riser", "offsetSec": -0.8 }`
-on the beat *before* the closer so the riser lands on it. Keep it under one
-cue a second — `qa.mjs` warns past that. Schema and event list: demo-assembly
+Then, per beat, tune with `"sfx": false`, `"sfx": "hit"`, or
+`"sfx": { "cue": "riser", "offsetSec": -0.8 }`. Keep it under one cue a
+second — `qa.mjs` warns past that. Schema and event list: demo-assembly
 skill § Audio. Existing projects: `render.mjs --sync-template` once.
 
 ## 3. Generate, render, QA
@@ -290,7 +342,7 @@ skill § Audio. Existing projects: `render.mjs --sync-template` once.
 node scripts/gen/tts.mjs       --project demo/<slug> --manifest shorts.json --all
 node scripts/gen/presenter.mjs --project demo/<slug> --manifest shorts.json --all   # face beats / split bottoms
 node scripts/gen/broll.mjs     --project demo/<slug> --manifest shorts.json --all   # stills auto-generate at 9:16
-node scripts/gen/sfx.mjs       --project demo/<slug> --manifest shorts.json --all   # sound-effect cues (ElevenLabs key)
+node scripts/gen/sfx.mjs       --project demo/<slug> --manifest shorts.json --all   # ONLY if the user asked for sound effects
 node scripts/render/render.mjs --project demo/<slug> --manifest shorts.json --cover-only   # preview frame 0
 node scripts/render/render.mjs --project demo/<slug> --manifest shorts.json
 node scripts/qa.mjs            --project demo/<slug> --manifest shorts.json

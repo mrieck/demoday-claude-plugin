@@ -182,8 +182,36 @@ await main(async () => {
         if (shots && meta?.duration) {
           const avgShotSec = meta.duration / shots;
           const [min, max] = style.targetShotSec;
-          pacing = { shots, avgShotSec: Number(avgShotSec.toFixed(2)), target: style.targetShotSec };
-          if (avgShotSec < min || avgShotSec > max) {
+          // list-scenes CSV: col 4 = start (s), col 10 = length (s)
+          const lens = rows.map((r) => r.split(",")).map((c) => ({ start: Number(c[3]), len: Number(c[9]) }))
+            .filter((c) => Number.isFinite(c.len));
+          const longest = lens.reduce((a, c) => (c.len > a.len ? c : a), { start: 0, len: 0 });
+          const firstCutSec = lens.length > 1 ? lens[1].start : meta.duration;
+          pacing = {
+            shots, avgShotSec: Number(avgShotSec.toFixed(2)), target: style.targetShotSec,
+            longestShotSec: Number(longest.len.toFixed(2)), longestShotAtSec: Number(longest.start.toFixed(2)),
+            firstCutSec: Number(firstCutSec.toFixed(2)),
+          };
+          // scenedetect misses cuts that only change a dark top pane (anchored
+          // terminals/dashboards), so also count what the manifest declares.
+          const declared = m.timeline.reduce((n, sc) => n + Math.max(1, (sc.beats || []).length), 0);
+          const declaredAvg = meta.duration / declared;
+          pacing.declaredCuts = declared;
+          pacing.declaredAvgShotSec = Number(declaredAvg.toFixed(2));
+          info(`  pacing (manifest): ${declared} declared shots, ${declaredAvg.toFixed(2)}s average`);
+          const underDetected = shots < declared * 0.6;
+          if (style.rules && !underDetected) {
+            const closerStart = meta.duration - 6;
+            if (longest.len > style.rules.maxShotSec && longest.start < closerStart) {
+              warn(`pacing: longest shot is ${longest.len.toFixed(1)}s at ${longest.start.toFixed(1)}s — the "${m.style}" style holds nothing past ${style.rules.maxShotSec}s outside the closer`);
+            }
+            if (firstCutSec > style.rules.hookCutSec) {
+              warn(`pacing: first cut at ${firstCutSec.toFixed(1)}s — the "${m.style}" hook cuts to a visual within ${style.rules.hookCutSec}s`);
+            }
+          }
+          if (avgShotSec > max && declaredAvg >= min && declaredAvg <= max) {
+            info(`  pacing: scenedetect saw ${shots} shots (${avgShotSec.toFixed(2)}s avg) but the manifest declares ${declared} — dark top-pane cuts are under-detected; trust the frames`);
+          } else if (avgShotSec < min || avgShotSec > max) {
             warn(
               `pacing: ${shots} shots, ${avgShotSec.toFixed(2)}s average — the "${m.style}" style targets ` +
               `${min}-${max}s. ${avgShotSec > max ? "Add beats or tighten scenes." : "That is faster than readable."}`
