@@ -91,6 +91,10 @@ time you run `/demoday:create-demo-video`, Claude checks your machine and
 installs anything missing (Node packages, a capture browser, ffmpeg) before
 filming starts.
 
+Desktop scrolling also needs Xcode Command Line Tools (`xcode-select --install`).
+The capture tool compiles a small native scroll helper once and caches it in the
+temporary directory; `doctor.mjs` checks that the Swift compiler is available.
+
 > **Requirements:** macOS and [Claude Code](https://claude.com/claude-code). The
 > only thing Claude can't do for you is the two steps below.
 
@@ -164,6 +168,22 @@ pacing, the `demo.json` manifest, content-addressed caching, and everything abou
 API-key resolution — live in [HOW_IT_WORKS.md](HOW_IT_WORKS.md).
 
 Meme-style cold opens (reaction clip + slow-mo cutout + freeze frame + music + push-in) are declared as a `composite` block on a scene and baked by `scripts/edit/composite.mjs`; `scripts/gen/fetch-audio.mjs` pulls a music cue with yt-dlp; `scripts/gen/sfx.mjs` designs the sound-effect pack and `scripts/lib/sfx.mjs` places every cue on the absolute timeline before the render. Every render rewrites `SCRIPT.md` from the manifest so downstream tools (cross-posting) always read the current cut.
+
+## 🤖 Automation and social media
+
+**Want Claude to make videos while you sleep?** [Overboard](https://tryoverboard.com)
+is a Mac app that runs Claude Code agents 24/7 on the Claude subscription you
+already pay for. Put `/demoday:create-demo-video` on its scheduler and wake up
+to a rendered demo of last night's release, or dispatch a video from your phone
+over Telegram or Slack and let your Mac do the rest. No cloud server, no API
+bill. [tryoverboard.com](https://tryoverboard.com)
+
+**Need a social media tool to grow your brand?** [Social Cue](https://trysocialcue.com)
+is a Claude Code plugin that finds the Reddit, Hacker News and X conversations
+your customers are already having, drafts replies in your voice, and cross-posts
+your DemoDay Shorts to YouTube, TikTok and Instagram with platform-native
+captions. Every video on this README was scheduled with it.
+[trysocialcue.com](https://trysocialcue.com)
 
 ## 📄 License notes
 
