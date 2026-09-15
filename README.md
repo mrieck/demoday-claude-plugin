@@ -247,8 +247,9 @@ bill. [tryoverboard.com](https://tryoverboard.com)
 **Need a social media tool to grow your brand?** [Social Cue](https://trysocialcue.com)
 is a Claude Code plugin that finds the Reddit, Hacker News and X conversations
 your customers are already having, drafts replies in your voice, and cross-posts
-your DemoDay Shorts to YouTube, TikTok and Instagram with platform-native
-captions. Every video on this README was scheduled with it.
+your DemoDay Shorts to YouTube, TikTok and Instagram with a title, post text
+and hashtags written for each platform. (The on-screen captions are burned into
+the video by DemoDay itself.) Every video on this README was scheduled with it.
 [trysocialcue.com](https://trysocialcue.com)
 
 ## 📄 License notes
