@@ -29,6 +29,9 @@ https://github.com/user-attachments/assets/8c122641-61c9-452c-aa34-293eea294419
 plugin, in DemoDay's `dynamic` style: one AI presenter take re-framed over the
 screen, everything else filmed, narrated and cut by DemoDay.*
 
+> Like what you see? [⭐ Star the repo](https://github.com/mrieck/demoday-claude-plugin) —
+> it's how people find it.
+
 ## 📱 Shorts
 
 The same project can also be cut into a vertical **Short** for YouTube Shorts,
@@ -251,6 +254,18 @@ your DemoDay Shorts to YouTube, TikTok and Instagram with a title, post text
 and hashtags written for each platform. (The on-screen captions are burned into
 the video by DemoDay itself.) Every video on this README was scheduled with it.
 [trysocialcue.com](https://trysocialcue.com)
+
+## ⭐ If this saved you an afternoon
+
+DemoDay is free and built by one person. If it made you a video you'd
+actually post, **a star on this repo** is the thing that helps other people
+find it — and it tells me which parts to keep building.
+
+[![Star this repo](https://img.shields.io/github/stars/mrieck/demoday-claude-plugin?style=social)](https://github.com/mrieck/demoday-claude-plugin)
+
+Got a video out of it? Open an issue with the link — I'll add it to a
+"made with DemoDay" list here. Bugs, ideas and rough edges go in
+[issues](https://github.com/mrieck/demoday-claude-plugin/issues) too.
 
 ## 📄 License notes
 
