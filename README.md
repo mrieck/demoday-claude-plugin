@@ -25,7 +25,7 @@ Copilot, Gemini CLI and every other agent that can run a shell — see
 
 https://github.com/user-attachments/assets/5f23659e-1ee3-43a7-b635-5117d7509740
 
-*Sample demo video of SocialCue, another Claude Plugin, this is "Dynamic Tutorial" Type.*
+*Sample demo video of [SocialCue](https://trysocialcue.com), another Claude Plugin, this is "Dynamic Tutorial" Type.*
 
 ## 📱 Shorts
 
