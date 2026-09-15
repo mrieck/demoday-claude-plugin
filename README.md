@@ -25,20 +25,16 @@ Copilot, Gemini CLI and every other agent that can run a shell — see
 
 https://github.com/user-attachments/assets/8c122641-61c9-452c-aa34-293eea294419
 
-*Sample demo video of [SocialCue](https://trysocialcue.com), another Claude Plugin, this is "Dynamic Tutorial" Type.*
+*Sample tutorial for [Social Cue](https://trysocialcue.com), a Claude Code
+plugin, in DemoDay's `dynamic` style: one AI presenter take re-framed over the
+screen, everything else filmed, narrated and cut by DemoDay.*
 
 ## 📱 Shorts
 
 The same project can also be cut into a vertical **Short** for YouTube Shorts,
 Instagram Reels and TikTok — say *"make a short"* (or "vertical video", "Reel",
-"TikTok") and Claude picks one of four named styles with you:
-
-| style | feels like |
-|---|---|
-| `listicle` | "3 ways it fixes X" — numbered rundown, a cut every ~1.5s, presenter anchored under the demo |
-| `cohost` | screenshare with the presenter talking below it throughout |
-| `flashcard` | big typographic cards asking, the UI answering — no face |
-| `glide` | one immersive screen recording, the camera gliding to each click |
+"TikTok") and Claude picks one of the four vertical styles with you (see
+[Styles](#-styles) below):
 
 https://github.com/user-attachments/assets/5597a659-5655-4b5e-a2f7-8b77ba55d42a
 
@@ -47,6 +43,33 @@ plugin that finds conversations worth joining. The presenter is an AI avatar
 made from a photo of the author, speaking with a designed ElevenLabs voice; the
 "it browses for you" beat is a Remotion animation instead of screen capture,
 timed to the narration word by word.*
+
+## 🎨 Styles
+
+Every video starts from a named style — a complete look with sensible
+defaults (presenter mode, captions, transitions, pacing rules) that Claude
+picks with you at the start: *"which of these is it most like?"* Nine so far,
+five wide and four vertical. Anything a style sets can still be changed per
+scene.
+
+**Wide (16:9)** — YouTube, a landing page, a README:
+
+| style | feels like |
+|---|---|
+| `launch` | Classic product demo: presenter intro and outro, narrated screen capture, a beat of b-roll, one clear CTA |
+| `anchor` | Avatar-led: the presenter is always on screen — full-frame between demos, a corner bubble over them |
+| `tutorial` | Step-by-step walkthrough: the full workflow on screen, the presenter riding along as a corner bubble in one continuous take |
+| `dynamic` | Dynamic tutorial: the same continuous take **re-framed** every few seconds — full-frame face, tall side panel, corner card — with animated moves between them, the screen zoomed into the element being explained, build-up captions always on. Two paces: `lively` (a move every 4–6s) or `calm` (one framing per step) |
+| `explainer` | No face: motion-graphic cards and voiceover over the demos — for dev tools and infra where a stock face undercuts credibility |
+
+**Vertical (9:16)** — YouTube Shorts, Reels, TikTok:
+
+| style | feels like |
+|---|---|
+| `listicle` | "3 ways it fixes X" — numbered rundown, a cut every ~1.5s, presenter anchored under the demo, a lead-magnet CTA |
+| `cohost` | Screenshare: demo on top, the presenter talking below it throughout |
+| `flashcard` | Big typographic cards asking, the UI answering — no face |
+| `glide` | One immersive screen recording, the camera gliding to each click, karaoke captions |
 
 ## ✨ What you get
 
@@ -57,15 +80,10 @@ timed to the narration word by word.*
   so every scene lands exactly on the voice.
 - 🧑‍💼 **Optional on-camera presenter** — an AI presenter for the intro, outro
   and cutaways, lip-synced to the same voice as the narration.
-- 🧭 **Wide videos in named styles too** — `launch` (classic promo), `anchor`
-  (avatar-led), `explainer` (no face), `tutorial`: a step-by-step walkthrough
-  with the full workflow on screen and the presenter riding along as a corner
-  bubble — one continuous lip-synced take that stays up through every cut
-  (circle or rounded square, any corner; bottom-right by default) — or
-  `dynamic`: the same continuous take re-framed every few seconds (full-frame
-  face, tall side panel, corner card) with animated moves between them, the
-  screen zoomed into the element being explained, and build-up captions
-  always on.
+- 🧭 **Nine named styles** — five wide (`launch`, `anchor`, `tutorial`,
+  `dynamic`, `explainer`) and four vertical (`listicle`, `cohost`,
+  `flashcard`, `glide`), each a complete look Claude picks with you — see
+  [Styles](#-styles).
 - 🗣️ **Custom character voices** — describe a voice in plain English
   (*"weathered lobster-boat captain, thick coastal accent"*) and the whole demo
   is narrated in it.
@@ -73,8 +91,8 @@ timed to the narration word by word.*
   zoom-to-click, callouts, b-roll and audio ducking, rendered with
   [Remotion](https://remotion.dev).
 - 📱 **Vertical Shorts too** — cut a 15–45s 9:16 Short (YouTube Shorts,
-  Reels, TikTok) from the same project in one of four named styles: listicle,
-  cohost, flashcard or glide.
+  Reels, TikTok) from the same project, with its own frame-0 hook card so the
+  thumbnail is never a random frame.
 - 💻 **Films almost anything on a Mac** — web apps, native macOS apps, and
   CLI/terminal programs (yes, it can demo a Claude Code plugin from inside a
   live `claude` session).
