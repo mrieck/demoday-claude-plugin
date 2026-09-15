@@ -32,6 +32,12 @@ function describeVisual(s) {
   else {
     if (s.composite) bits.push(`composite (${(s.composite.layers ?? []).length} layers${s.composite.zoom ? ", push-in" : ""}${s.composite.music ? ", music" : ""})`);
     if (s.beatLayout === "anchored") bits.push(`anchored split, ${s.bottom?.kind ?? "captions"} below`);
+    else if (s.beatLayout === "dynamic" || (s.beats ?? []).some((b) => b.layout)) {
+      const moves = (s.beats ?? []).filter((b) => b.layout).map((b) => b.layout);
+      bits.push(`presenter ${moves.join(" → ")}`);
+      const focused = (s.beats ?? []).filter((b) => b.focus).length;
+      if (focused) bits.push(`${focused} focus zoom${focused > 1 ? "s" : ""}`);
+    }
     else if (s.framing) bits.push(`framing ${s.framing}`);
     const titles = (s.beats ?? []).filter((b) => b.shot === "insert" && b.title).map((b) => `"${b.title}"`);
     if (titles.length) bits.push(`inserts ${titles.join(", ")}`);
@@ -47,7 +53,7 @@ export function renderScript(m, { rendered } = {}) {
   const fmt = m.format ?? {};
   const lines = [];
   lines.push(OPEN);
-  lines.push(`# ${m.product?.name ?? m.slug}${m.style ? ` — ${m.style} Short` : ""}`);
+  lines.push(`# ${m.product?.name ?? m.slug}${m.style ? ` — ${m.style} ${(fmt.height ?? 0) > (fmt.width ?? 0) ? "Short" : "video"}` : ""}`);
   lines.push("");
   const meta = [
     `Output: \`out/${m.slug}.mp4\` ${fmtDuration(total)} ${fmt.width}x${fmt.height}`,

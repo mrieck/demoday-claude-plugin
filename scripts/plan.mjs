@@ -22,7 +22,7 @@ import { report, info, warn, main, fmtDuration } from "./lib/log.mjs";
 
 const USAGE =
   "plan.mjs --project <dir> [--manifest <file>] " +
-  "[--init --slug <slug> --name <product> [--from <file>] [--format 9:16] [--style listicle] [--sfx]]";
+  "[--init --slug <slug> --name <product> [--from <file>] [--format 9:16] [--style listicle] [--pace calm] [--sfx]]";
 
 /** Preset dimensions for --format; fps stays 30 across all of them. */
 const FORMAT_PRESETS = {
@@ -95,6 +95,17 @@ await main(async () => {
       // manifest-wide (a scene can still set its own zoomToClick).
       if (style.pip) m.presenter.pip = structuredClone(style.pip);
       if (style.continuousPip) m.presenter.continuousPip = true;
+      // Dynamic style: the take is shot at the frame's aspect (face shots fill
+      // it) and the presenter frame moves between layouts over frame.morphMs.
+      if (style.takeAspect) m.presenter.takeAspect = style.takeAspect;
+      if (style.frame) m.presenter.frame = structuredClone(style.frame);
+      // --pace calm: a plain step-by-step (one layout per step) instead of
+      // the lively creator grammar; validate() relaxes its move-frequency rules.
+      if (args.pace) {
+        if (!style.frame) throw new Error(`--pace only applies to styles with a moving presenter frame (dynamic), not "${args.style}"`);
+        if (!manifest.FRAME_PACES.includes(args.pace)) throw new Error(`--pace must be one of ${manifest.FRAME_PACES.join(" | ")}, got "${args.pace}"`);
+        m.presenter.frame.pace = args.pace;
+      }
       if (style.zoomToClick === false) m.zoomToClick = false;
       // Sound-effect pack: the style's event map plus the default cues, files
       // not generated yet (gen/sfx.mjs --all). Strictly opt-in (--sfx): the

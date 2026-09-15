@@ -180,6 +180,121 @@ const BoxedCaptions = ({ words, theme, t, fps, width, height, emphasis, beats, a
   );
 };
 
+const BUILDUP_MAX_WORDS = 5;
+const BUILDUP_STOP = new Set([
+  "about", "after", "again", "their", "there", "these", "those", "which", "while", "where",
+  "would", "could", "should", "because", "before", "being", "every", "other", "really", "thing",
+  "things", "going", "still", "right", "here's", "there's", "that's", "we're", "you're", "they're",
+  "into", "just", "than", "then", "them", "this", "that", "with", "have", "from", "your", "what",
+]);
+
+/**
+ * Deterministic emphasis pick for a phrase with no authored tone: the longest
+ * word of 5+ letters that is not a function word. Ties go to the earlier word.
+ */
+function autoEmphasisIndex(words) {
+  let best = -1;
+  let bestLen = 0;
+  words.forEach((w, i) => {
+    const tok = normToken(w.text);
+    if (tok.length < 5 || BUILDUP_STOP.has(tok)) return;
+    if (tok.length > bestLen) { best = i; bestLen = tok.length; }
+  });
+  return best;
+}
+
+/**
+ * Build-up captions — the dynamic-tutorial look measured from the reference:
+ * a black box in the bottom band, pre-sized to the whole 1-5 word phrase,
+ * whose words appear one by one as they are spoken; ONE word per phrase sits
+ * in an accent box (captionEmphasis if the author marked one, otherwise an
+ * automatic pick). Centered and never wider than half the frame, so it clears
+ * a corner card on either side.
+ */
+const BuildupCaptions = ({ words, theme, t, fps, width, height, emphasis, autoEmphasis = true }) => {
+  const phrases = groupIntoPhrases(words, BUILDUP_MAX_WORDS);
+  const tones = emphasisTones(words, emphasis);
+  let base = 0;
+  const withBase = phrases.map((p) => {
+    const entry = { phrase: p, base };
+    base += p.words.length;
+    return entry;
+  });
+
+  let active = null;
+  for (let i = 0; i < withBase.length; i++) {
+    const start = withBase[i].phrase.startSec - 0.08;
+    const end = i < withBase.length - 1 ? withBase[i + 1].phrase.startSec - 0.08 : withBase[i].phrase.endSec + 0.35;
+    if (t >= start && t < end) { active = { ...withBase[i], start }; break; }
+  }
+  if (!active) return null;
+
+  const s = typeScale(width, height);
+  const pop = spring({
+    frame: Math.round((t - active.start) * fps),
+    fps,
+    config: { damping: 200 },
+    durationInFrames: Math.round(fps * 0.16),
+  });
+  const pw = active.phrase.words;
+  let accentAt = pw.findIndex((_, i) => tones[active.base + i]);
+  if (accentAt < 0 && autoEmphasis !== false) accentAt = autoEmphasisIndex(pw);
+  const accentTone = accentAt >= 0 ? tones[active.base + accentAt] : null;
+  const accent = accentTone === "neg" ? NEG_COLOR : theme.primary;
+
+  return (
+    <div
+      style={{
+        position: "absolute",
+        left: 0, right: 0,
+        bottom: Math.round(height * 0.09),
+        display: "flex",
+        justifyContent: "center",
+        transform: `scale(${0.94 + 0.06 * pop})`,
+      }}
+    >
+      <div
+        style={{
+          maxWidth: "52%",
+          display: "inline-flex",
+          flexWrap: "wrap",
+          justifyContent: "center",
+          alignItems: "center",
+          gap: `0 ${Math.round(14 * s)}px`,
+          background: "rgba(0,0,0,.86)",
+          borderRadius: Math.round(10 * s),
+          padding: `${Math.round(8 * s)}px ${Math.round(18 * s)}px`,
+          font: `800 ${Math.round(54 * s)}px/1.25 ${theme.font}`,
+          color: "#fff",
+          textAlign: "center",
+        }}
+      >
+        {pw.map((w, i) => {
+          // Words are laid out from the start (the box is pre-sized to the
+          // phrase) and revealed as spoken.
+          const shown = t >= w.startSec - 0.05;
+          const boxed = i === accentAt;
+          return (
+            <span
+              key={i}
+              style={{
+                display: "inline-block",
+                visibility: shown ? "visible" : "hidden",
+                background: boxed ? accent : "transparent",
+                borderRadius: boxed ? Math.round(8 * s) : 0,
+                padding: boxed ? `0 ${Math.round(10 * s)}px` : 0,
+                margin: boxed ? `${Math.round(2 * s)}px 0` : 0,
+              }}
+            >
+              {w.text}
+            </span>
+          );
+        })}
+      </div>
+    </div>
+  );
+};
+
 const ShortsCaptions = ({ words, theme, t, fps, width, height, placement = "default", splitPct = 0.55 }) => {
   const phrases = groupIntoPhrases(words, SHORTS_MAX_WORDS);
 
@@ -269,12 +384,21 @@ const ShortsCaptions = ({ words, theme, t, fps, width, height, placement = "defa
   );
 };
 
-export const Captions = ({ words, theme, offsetSec = 0, style = "clean", placement = "default", splitPct = 0.55, emphasis, beats, anchored, scenePlacement }) => {
+export const Captions = ({ words, theme, offsetSec = 0, style = "clean", placement = "default", splitPct = 0.55, emphasis, beats, anchored, scenePlacement, autoEmphasis }) => {
   const frame = useCurrentFrame();
   const { fps, width, height } = useVideoConfig();
   if (!words?.length) return null;
 
   const t = frame / fps + offsetSec;
+
+  if (style === "buildup") {
+    return (
+      <BuildupCaptions
+        words={words} theme={theme} t={t} fps={fps} width={width} height={height}
+        emphasis={emphasis} autoEmphasis={autoEmphasis}
+      />
+    );
+  }
 
   if (style === "boxed") {
     return (

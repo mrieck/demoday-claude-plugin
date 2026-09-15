@@ -8,8 +8,11 @@ import { slide } from "@remotion/transitions/slide";
 import { DemoClip, framingFor } from "./scenes/DemoClip.jsx";
 import { SplitScene, SPLIT_DEFAULT_PCT, resolveBottom } from "./scenes/SplitScene.jsx";
 import { BeatScene } from "./scenes/BeatScene.jsx";
+import { DynamicScene } from "./scenes/DynamicScene.jsx";
 import { PresenterFull } from "./scenes/PresenterFull.jsx";
 import { PresenterPip } from "./scenes/PresenterPip.jsx";
+import { PresenterFrame } from "./scenes/PresenterFrame.jsx";
+import { MORPH_DEFAULT_MS, FACE_BAND } from "./lib/layouts.js";
 import { BRollClip } from "./scenes/BRollClip.jsx";
 import { Card } from "./scenes/Card.jsx";
 import { Captions } from "./components/Captions.jsx";
@@ -39,9 +42,14 @@ export function totalFrames(props, fps) {
   return Math.max(1, sum - overlap);
 }
 
-const SceneBody = ({ scene, theme, fps, presenterMode, pipVideo, pipDefaults, pipTake, split }) => {
+const SceneBody = ({ scene, theme, fps, presenterMode, pipVideo, pipDefaults, pipTake, split, morphMs }) => {
   switch (scene.kind) {
     case "demo": {
+      // Dynamic style: the content pane under a moving presenter frame (the
+      // frame itself is the global PresenterFrame layer in DemoVideo below).
+      if (scene.beats?.length && scene.beatLayout === "dynamic") {
+        return <DynamicScene scene={scene} theme={theme} fps={fps} morphMs={morphMs} />;
+      }
       if (scene.beats?.length) return <BeatScene scene={scene} theme={theme} fps={fps} presenterMode={presenterMode} />;
       if (split) return <SplitScene scene={scene} theme={theme} fps={fps} presenterMode={presenterMode} demoStartSec={scene.videoStartSec || 0} />;
       // The corner pip prefers the scene's own lip-synced clip (the tutorial
@@ -70,7 +78,9 @@ const SceneBody = ({ scene, theme, fps, presenterMode, pipVideo, pipDefaults, pi
       return <BRollClip scene={scene} theme={theme} />;
     case "card":
     default:
-      return <Card scene={scene} theme={theme} />;
+      // Under the dynamic style's `face-band` layout the presenter covers the
+      // top of the frame; the card draws as a strip along the bottom.
+      return <Card scene={scene} theme={theme} band={scene.layout === "face-band" ? FACE_BAND : null} />;
   }
 };
 
@@ -104,6 +114,10 @@ export const DemoVideo = (props) => {
   const pipTake = presenterMode === "always" && props.presenter?.pipTake?.segments?.length
     ? props.presenter.pipTake.segments
     : null;
+  // Dynamic style: the same take, re-framed along presenter.layoutTrack
+  // (absolute seconds, from build-props) instead of parked in one corner.
+  const layoutTrack = props.presenter?.layoutTrack?.length ? props.presenter.layoutTrack : null;
+  const morphMs = props.presenter?.frame?.morphMs ?? MORPH_DEFAULT_MS;
 
   // The watermark covers contiguous runs of scenes that have not opted out with
   // `watermark: false` (a CTA card whose logo it would sit on, say). Runs are
@@ -140,6 +154,7 @@ export const DemoVideo = (props) => {
                 pipDefaults={props.presenter?.pip || {}}
                 pipTake={pipTake}
                 split={scene.kind === "demo" && framingFor(scene, width, height) === "split"}
+                morphMs={morphMs}
               />
             </TransitionSeries.Sequence>,
           ];
@@ -159,6 +174,29 @@ export const DemoVideo = (props) => {
           return nodes;
         })}
       </TransitionSeries>
+
+      {/* The continuous presenter take sits ABOVE the scenes and BELOW the
+          captions: a full-frame face layout must not swallow the caption. */}
+      {pipTake
+        ? pipTake.map((seg, i) => {
+            const from = secToFrames(seg.fromSec, fps);
+            const frames = Math.min(secToFrames(seg.durationSec, fps), Math.max(0, total - from));
+            return (
+              <Sequence key={`pip-${i}`} from={from} durationInFrames={frames}>
+                {layoutTrack ? (
+                  <PresenterFrame
+                    video={seg.video} track={layoutTrack} segmentFromSec={seg.fromSec} theme={theme} morphMs={morphMs}
+                    srcAspect={seg.width && seg.height ? seg.width / seg.height : null}
+                    faceFit={props.presenter?.frame?.faceFit || "auto"}
+                    panelZoom={props.presenter?.frame?.panelZoom || null}
+                  />
+                ) : (
+                  <PresenterPip video={seg.video} theme={theme} pip={props.presenter?.pip || {}} animateIn={i === 0} />
+                )}
+              </Sequence>
+            );
+          })
+        : null}
 
       {audioTrack.map(({ scene, from, frames }) => {
         // Captions move with the split layout: centered in the bottom zone when
@@ -189,23 +227,12 @@ export const DemoVideo = (props) => {
                 beats={scene.beats}
                 anchored={anchored}
                 scenePlacement={scene.captionPlacement}
+                autoEmphasis={props.captions?.autoEmphasis}
               />
             ) : null}
           </Sequence>
         );
       })}
-
-      {pipTake
-        ? pipTake.map((seg, i) => {
-            const from = secToFrames(seg.fromSec, fps);
-            const frames = Math.min(secToFrames(seg.durationSec, fps), Math.max(0, total - from));
-            return (
-              <Sequence key={`pip-${i}`} from={from} durationInFrames={frames}>
-                <PresenterPip video={seg.video} theme={theme} pip={props.presenter?.pip || {}} animateIn={i === 0} />
-              </Sequence>
-            );
-          })
-        : null}
 
       {wmRuns.map((r) => (
         <Sequence key={`wm-${r.from}`} from={r.from} durationInFrames={r.to - r.from}>

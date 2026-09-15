@@ -114,7 +114,7 @@ const ImagesSpread = ({ images, fps, width, height, s }) => {
   });
 };
 
-const InsertBeat = ({ beat, theme }) => {
+export const InsertBeat = ({ beat, theme }) => {
   const frame = useCurrentFrame();
   const { fps, durationInFrames, width, height } = useVideoConfig();
   const s = typeScale(width, height);

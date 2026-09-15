@@ -15,6 +15,8 @@ import { existsSync } from "node:fs";
 import path from "node:path";
 import { STYLES, STYLE_NAMES } from "./styles.mjs";
 import { SFX_EVENTS, referencedCues, missingCues } from "./sfx.mjs";
+import { PRESENTER_LAYOUTS, CARD_CORNER, buildLayoutTrack, layoutStats, layoutGroup, focusProblems } from "./layouts.mjs";
+export { PRESENTER_LAYOUTS } from "./layouts.mjs";
 
 export const MANIFEST_NAME = "demo.json";
 
@@ -44,8 +46,30 @@ export const SPLIT_BOTTOM_KINDS = ["presenter", "image", "captions", "bullets"];
  */
 export const BEAT_SHOTS = ["face", "screen", "split", "insert", "card"];
 
-/** Caption renderings: "clean" pill, "shorts" karaoke, "boxed" phrase cards. */
-export const CAPTION_STYLES = ["clean", "shorts", "boxed"];
+/**
+ * How a beat scene lays its windows out. "anchored" (Shorts): the bottom zone
+ * mounts once, pane shots cut in the top pane. "dynamic" (16:9 dynamic style):
+ * the screen content fills whatever the presenter frame leaves free; beats
+ * carry `layout` (PRESENTER_LAYOUTS) and an optional `focus` zoom box.
+ */
+export const BEAT_LAYOUTS = ["anchored", "dynamic"];
+
+/**
+ * presenter.frame (dynamic style): `pace` "lively" = the creator grammar, a
+ * move every 4-6s (the rules measure it); "calm" = one layout per step, moves
+ * only between steps. `faceFit` "auto" letterboxes a take whose aspect differs
+ * from the frame's for the full-frame layouts; "cover" crops; "contain" always
+ * letterboxes.
+ */
+export const FRAME_PACES = ["lively", "calm"];
+export const FACE_FITS = ["auto", "cover", "contain"];
+
+/**
+ * Caption renderings: "clean" pill, "shorts" karaoke, "boxed" phrase cards,
+ * "buildup" bottom phrase box whose words appear as spoken with ONE boxed
+ * emphasis word (the dynamic style).
+ */
+export const CAPTION_STYLES = ["clean", "shorts", "boxed", "buildup"];
 export const CAPTION_PLACEMENTS = ["seam", "mid", "low"];
 
 /** Nearest generation-model aspect label for a format. */
@@ -431,7 +455,7 @@ export function validate(manifest) {
   // that gets watched from one that reads as a slideshow. Timing rules need
   // durations, so they only fire once TTS has run.
   const rules = STYLES[manifest?.style]?.rules;
-  if (rules && Array.isArray(manifest?.timeline)) {
+  if (rules && rules.hookCutSec != null && Array.isArray(manifest?.timeline)) {
     const tl = manifest.timeline;
     const first = tl[0];
     if (first) {
@@ -491,6 +515,123 @@ export function validate(manifest) {
       if (!/\b(comment|dm me|dm the word|reply with)\b/.test(spoken)) {
         push(warnings, `no lead-magnet CTA in the narration — the ${manifest.style} style closes on "Comment WORD and I'll send you the link" ` +
           `(comments drive reach); "follow for more" alone underperforms`);
+      }
+    }
+  }
+
+  // ---- style hard rules (dynamic) -----------------------------------------
+  // The dynamic tutorial is one continuous take re-framed over the screen.
+  // Errors are the things the renderer cannot draw or that would break the
+  // take's lip-sync; the pacing numbers (measured from the reference video)
+  // are warnings computed on the merged absolute layout track.
+  if (rules?.layouts && Array.isArray(manifest?.timeline)) {
+    const tl = manifest.timeline;
+    const st = manifest.style;
+    // presenter.frame: { morphMs, pace, faceFit }. `pace` "lively" (default)
+    // is the creator grammar the rules below measure — a move every 4-6s;
+    // "calm" is a plain step-by-step: one layout per step, moves only at
+    // step boundaries, so the frequency rules stand down (a long hold is
+    // still capped, just generously).
+    const fr = manifest.presenter?.frame || {};
+    if (fr.pace != null && !FRAME_PACES.includes(fr.pace)) {
+      push(errors, `presenter.frame.pace must be one of ${FRAME_PACES.join(" | ")}, got "${fr.pace}"`);
+    }
+    if (fr.faceFit != null && !FACE_FITS.includes(fr.faceFit)) {
+      push(errors, `presenter.frame.faceFit must be one of ${FACE_FITS.join(" | ")}, got "${fr.faceFit}"`);
+    }
+    if (fr.morphMs != null && !(fr.morphMs >= 0 && fr.morphMs <= 1000)) {
+      push(errors, `presenter.frame.morphMs must be 0-1000 (0 = hard cuts, ~200 is the reference look)`);
+    }
+    if (fr.panelZoom != null && !(fr.panelZoom >= 1 && fr.panelZoom <= 1.6)) {
+      push(errors, `presenter.frame.panelZoom must be 1-1.6 (1 = the cover-fit alone; more amplifies the presenter's movement)`);
+    }
+    const calm = fr.pace === "calm";
+    const maxHold = calm ? (rules.calmMaxLayoutHoldSec ?? 30) : rules.maxLayoutHoldSec;
+    if (mode !== "always") {
+      push(errors, `presenter.mode must be "always" for the ${st} style (one continuous take is the whole idea), got "${mode || "hybrid"}"`);
+    }
+    if (rules.noTransitions && (manifest.transitions || []).length) {
+      push(errors, `the ${st} style uses no scene transitions — they overlap scenes and drift the take's lip-sync. Remove transitions[]; beats do the cutting.`);
+    }
+    if (tl[0] && !(tl[0].kind === "demo" ? tl[0].beats?.[0]?.layout : tl[0].layout)) {
+      push(errors, `timeline[0] "${tl[0].id}": the first ${tl[0].kind === "demo" ? "beat" : "scene"} must declare a layout (${PRESENTER_LAYOUTS.join(" | ")}) — everything after it inherits`);
+    }
+    tl.forEach((scene, si) => {
+      const at = `timeline[${si}] "${scene.id}"`;
+      if (scene.layout != null && !PRESENTER_LAYOUTS.includes(scene.layout)) {
+        push(errors, `${at}: layout must be one of ${PRESENTER_LAYOUTS.join(" | ")}, got "${scene.layout}"`);
+      }
+      if (scene.kind === "demo" && scene.layout != null) {
+        push(warnings, `${at}: scene-level layout on a demo scene is ignored — put layout on the beats`);
+      }
+      if (scene.pip === false) {
+        push(warnings, `${at}: pip: false pauses the take (the presenter re-poses afterwards) — use a beat with layout "none" to clear the frame instead`);
+      } else if (scene.pip && typeof scene.pip === "object") {
+        push(warnings, `${at}: a pip object is ignored by the ${st} style — the layouts replace the corner bubble`);
+      }
+      if (scene.kind === "demo" && !scene.beats?.length && scene.durationSec != null && scene.durationSec > maxHold) {
+        push(warnings, `${at}: a ${scene.durationSec}s demo scene with no beats — one framing for ${scene.durationSec}s; ${calm ? `even a calm ${st} moves at least every ${maxHold}s` : `the ${st} style moves every ${STYLES[st].targetShotSec.join("-")}s`}. Add layout beats.`);
+      }
+      for (const [bi, b] of (scene.kind === "demo" ? scene.beats || [] : []).entries()) {
+        const bat = `${at} beats[${bi}]`;
+        if (b?.layout != null && !PRESENTER_LAYOUTS.includes(b.layout)) {
+          push(errors, `${bat}: layout must be one of ${PRESENTER_LAYOUTS.join(" | ")}, got "${b.layout}"`);
+        }
+        if (["face", "split", "card"].includes(b?.shot)) {
+          push(errors, `${bat}: shot "${b.shot}" is not used by the ${st} style — the presenter is framed by \`layout\` (use layout "face" for a punch-in)`);
+        }
+        if (b?.focus != null) {
+          for (const p of focusProblems(b.focus)) push(errors, `${bat}: ${p}`);
+          if (typeof b.focus?.w === "number" && b.focus.w >= 0.15 && b.focus.w < rules.focusMinW) {
+            push(warnings, `${bat}: focus.w ${b.focus.w} is under ${rules.focusMinW} — more than ~3x into rasterised UI reads as mush`);
+          }
+        }
+        if (b?.cut != null && b.cut !== "dissolve") {
+          push(errors, `${bat}: cut must be "dissolve" if set`);
+        }
+      }
+      if (scene.kind === "demo" && scene.beatLayout && scene.beatLayout !== "dynamic") {
+        push(warnings, `${at}: beatLayout "${scene.beatLayout}" under the ${st} style — build-props expects "dynamic" here`);
+      }
+    });
+    // Pacing, on the merged absolute track.
+    const track = buildLayoutTrack(tl, manifest.transitions);
+    if (track.length) {
+      const stats = layoutStats(track);
+      const total = stats.totalSec;
+      const where = (e) => `${e.sceneId}${e.beatIndex != null ? ` beats[${e.beatIndex}]` : ""}`;
+      for (const e of track) {
+        const len = e.toSec - e.fromSec;
+        if (len > maxHold + 0.05) {
+          push(warnings, `layout "${e.layout}" holds ${len.toFixed(1)}s from ${e.fromSec.toFixed(1)}s (${where(e)}) — ${calm ? `even a calm ${st} moves the frame at least every ${maxHold}s` : `the ${st} style moves the frame at least every ${maxHold}s`}`);
+        }
+      }
+      if (!calm && total > 0 && stats.firstChangeSec > rules.openWithinSec + 0.05) {
+        push(warnings, `first layout change at ${stats.firstChangeSec.toFixed(1)}s — the ${st} style hooks with a move inside ${rules.openWithinSec}s (presenter.frame.pace "calm" turns this off)`);
+      }
+      if (rules.closeOnFace && layoutGroup(stats.lastLayout) !== "face") {
+        push(warnings, `the video ends on layout "${stats.lastLayout}" — the ${st} style closes on the face with the CTA spoken to camera (give the closing card layout "face-band": face on top, logo/title/URL in a band below)`);
+      }
+      if (!calm && total >= 30 && stats.shots >= 4) {
+        for (const [g, want] of Object.entries(rules.layoutMix || {})) {
+          const got = stats.mix[g] ?? 0;
+          if (Math.abs(got - want) > rules.mixTolerance) {
+            push(warnings, `layout mix: ${Math.round(got * 100)}% ${g} shots (target ~${Math.round(want * 100)}%) — ` +
+              `${got < want ? `add ${g} beats` : `trade some ${g} beats for ${g === "face" ? "panel/card" : "face"}`}`);
+          }
+        }
+        const [lo, hi] = rules.targetShots;
+        const scale = Math.min(1, total / 120);
+        const wantLo = Math.round(lo * scale);
+        const wantHi = Math.round(hi * scale);
+        if (stats.shots < wantLo || stats.shots > wantHi) {
+          push(warnings, `${stats.shots} layout shots over ${total.toFixed(0)}s (${stats.avgShotSec}s avg) — the ${st} style wants ${wantLo}-${wantHi} at this length (${STYLES[st].targetShotSec.join("-")}s per shot)`);
+        }
+      }
+      const wmPos = manifest.watermark?.position;
+      if (wmPos) {
+        const clash = track.find((e) => CARD_CORNER[e.layout] === wmPos);
+        if (clash) push(warnings, `watermark sits ${wmPos}, the same corner as layout "${clash.layout}" (${where(clash)}) — move one of them`);
       }
     }
   }
@@ -679,13 +820,13 @@ export function validate(manifest) {
       push(errors, `${at}: beats only apply to demo scenes`);
     }
     if (scene.beatLayout) {
-      if (scene.beatLayout !== "anchored") {
-        push(errors, `${at}: beatLayout must be "anchored" if set, got "${scene.beatLayout}"`);
+      if (!BEAT_LAYOUTS.includes(scene.beatLayout)) {
+        push(errors, `${at}: beatLayout must be one of ${BEAT_LAYOUTS.join(" | ")} if set, got "${scene.beatLayout}"`);
       }
       if (!Array.isArray(scene.beats) || !scene.beats.length) {
         push(errors, `${at}: beatLayout needs beats — it shapes how the beat windows render`);
       }
-      if (!scene.bottom) {
+      if (scene.beatLayout === "anchored" && !scene.bottom) {
         push(warnings, `${at}: beatLayout "anchored" without a bottom slot — it will render as plain beat cuts`);
       }
     }
@@ -699,8 +840,16 @@ export function validate(manifest) {
         if (scene.beats[0].atSec !== 0) push(errors, `${at}: the first beat must start at atSec 0`);
         for (const [bi, b] of scene.beats.entries()) {
           const bat = `${at} beats[${bi}]`;
-          if (!BEAT_SHOTS.includes(b?.shot)) {
-            push(errors, `${bat}: shot must be one of ${BEAT_SHOTS.join(" | ")}, got "${b?.shot}"`);
+          // shot defaults to "screen" (the renderer's default too); a dynamic
+          // beat usually only carries layout/focus/videoStartSec.
+          if (b?.shot != null && !BEAT_SHOTS.includes(b.shot)) {
+            push(errors, `${bat}: shot must be one of ${BEAT_SHOTS.join(" | ")}, got "${b.shot}"`);
+          }
+          if (b?.layout != null && !PRESENTER_LAYOUTS.includes(b.layout)) {
+            push(errors, `${bat}: layout must be one of ${PRESENTER_LAYOUTS.join(" | ")}, got "${b.layout}"`);
+          }
+          if (b?.focus != null) {
+            for (const p of focusProblems(b.focus)) push(errors, `${bat}: ${p}`);
           }
           if (typeof b?.atSec !== "number" || b.atSec < 0) {
             push(errors, `${bat}: atSec must be a non-negative number`);
@@ -729,12 +878,12 @@ export function validate(manifest) {
             if (!["pan", "cover"].includes(b.framing)) {
               push(errors, `${bat}: framing must be "pan" or "cover"`);
             }
-            if (!["screen", "split"].includes(b.shot)) {
+            if (!["screen", "split"].includes(b.shot ?? "screen")) {
               push(warnings, `${bat}: framing only affects screen/split beats`);
             }
           }
           if (b.videoStartSec != null) {
-            if (!["screen", "split"].includes(b.shot)) {
+            if (!["screen", "split"].includes(b.shot ?? "screen")) {
               push(warnings, `${bat}: videoStartSec only affects screen/split beats`);
             }
             if (!(b.videoStartSec >= 0)) push(errors, `${bat}: videoStartSec must be >= 0`);
@@ -808,9 +957,19 @@ export function validate(manifest) {
  */
 export function pending(projectDir, manifest) {
   const out = [];
+  const has = (rel) => rel && existsSync(resolveIn(projectDir, rel));
+  // A continuous take (presenter.continuousPip) replaces every per-scene pip
+  // clip with one artifact; it is pending until presenter.mjs --all has run.
+  const continuous = manifest.presenter?.mode === "always" && !!manifest.presenter?.continuousPip;
+  if (continuous) {
+    const segs = manifest.presenter?.pipTake?.segments || [];
+    const narrated = (manifest.timeline || []).some((s) => s.audio);
+    if (narrated && (!segs.length || segs.some((s) => !has(s.video)))) {
+      out.push({ sceneId: "*", kind: "presenter", needs: ["pipTake"] });
+    }
+  }
   for (const scene of manifest.timeline || []) {
     const needs = [];
-    const has = (rel) => rel && existsSync(resolveIn(projectDir, rel));
 
     if (scene.narration && !has(scene.audio)) needs.push("audio");
     // A demo scene reusing an already-recorded clip (a Short cut from the main
@@ -822,8 +981,8 @@ export function pending(projectDir, manifest) {
       scene.bottom?.kind === "presenter" ||
       (scene.beats || []).some((b) => b.shot === "face" || (b.shot === "split" && scene.bottom?.kind === "presenter")) ||
       // Corner pip: mode "always" puts the presenter over every plain demo scene
-      // unless the scene opted out with pip: false.
-      (manifest.presenter?.mode === "always" && scene.kind === "demo" &&
+      // unless the scene opted out with pip: false — or the take covers it.
+      (manifest.presenter?.mode === "always" && !continuous && scene.kind === "demo" &&
         !scene.beats?.length && scene.pip !== false);
     if (wantsPresenterClip && scene.audio && !has(scene.presenterVideo)) {
       needs.push("presenterVideo");

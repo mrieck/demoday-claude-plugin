@@ -15,9 +15,12 @@ description: >-
 You are producing a finished video of someone's software. Not a screen recording —
 a *demo*: narrated, paced, with an intro, transitions and a point.
 
-`$CLAUDE_PLUGIN_ROOT` is the plugin root. Every command below runs from there
-unless stated. Each video is its own project directory under `<repo>/demo/`,
-named with a short kebab-case description of *that video*:
+`$CLAUDE_PLUGIN_ROOT` is the plugin root (outside Claude Code: the folder DemoDay
+is installed in — two directories above this file, the one holding `scripts/`,
+`mcp/` and the top-level `SKILL.md`). Every command below runs from there unless
+stated. Each video is its
+own project directory under `<repo>/demo/`, named with a short kebab-case
+description of *that video*:
 `demo/project-overview/` for a generic overview, `demo/onboarding-flow/`,
 `demo/v2-launch/`. A repo accumulates one subfolder per video. Pick the folder
 name when you pick the slug (they should match) and pass it as `--project
@@ -50,6 +53,20 @@ recon → direction → script → narration → rehearse → perform → presen
 
 ---
 
+## 0. Preflight
+
+```bash
+node scripts/doctor.mjs --install
+```
+
+Installs missing Node packages and Chromium, then checks keys, ffmpeg and macOS
+permissions, printing the exact fix for anything it cannot do itself. Do this
+before the first video on a machine and again whenever something fails
+mysteriously. If the `demo_*` tools are missing from your tool list even though
+the server is configured, the MCP server was started before its packages
+existed — reload MCP servers or restart the agent after `--install`, or use
+`node scripts/stage.mjs` (see §5).
+
 ## 1. Recon
 
 Read the codebase you were pointed at. You need to be able to say what the product
@@ -62,7 +79,8 @@ if it is a desktop app. Do not guess a port.
 
 ## 2. Direction — ask, don't assume
 
-Use AskUserQuestion. The answers change the whole shape of the video:
+Use AskUserQuestion (or however your agent asks the user a question). The
+answers change the whole shape of the video:
 
 - **Style — "which of these is it most like?"** Show the catalog and let the
   user pick; each name is a complete look with sensible defaults
@@ -73,6 +91,7 @@ Use AskUserQuestion. The answers change the whole shape of the video:
   | `launch` | 16:9 | Classic product demo: presenter intro/outro, narrated capture, b-roll |
   | `anchor` | 16:9 | Avatar-led: the presenter is always on screen — full-frame between demos, corner bubble over them |
   | `tutorial` | 16:9 | Step-by-step walkthrough: the full workflow on screen, the presenter riding along as a corner bubble |
+  | `dynamic` | 16:9 | Dynamic tutorial: one continuous presenter take re-framed every 4–6s (full-face / side panel / corner card) over zoomed-in screen beats, captions always on |
   | `explainer` | 16:9 | No face: motion-graphic cards + voiceover over demos |
   | `listicle` | 9:16 | "5 plugins that fix X" — numbered rundown, a cut every ~1.5s |
   | `cohost` | 9:16 | Screenshare: demo on top, person talking below throughout |
@@ -85,9 +104,10 @@ Use AskUserQuestion. The answers change the whole shape of the video:
 
 - **Goal and audience** — a launch trailer, an onboarding walkthrough, and an
   investor demo are different videos.
-- **Length** — 30s, 60s, 2min. Default to 60s; tutorials default to ~60–90s.
+- **Length** — 30s, 60s, 2min. Default to 60s; tutorials default to ~60–90s,
+  dynamic tutorials to ~120s.
   Length is the cost driver: narration, avatar and b-roll all bill per second,
-  and a corner-bubble style bills avatar-seconds for the *whole* runtime. Say
+  and a continuous-take style bills avatar-seconds for the *whole* runtime. Say
   so, default short, and let the user override — a 5-minute walkthrough is
   fine if that is what they want. (Shorts: 15–45s.)
 - **Presenter mode** — see below; the style already picked a default.
@@ -185,6 +205,97 @@ Existing projects keep their scaffolded Remotion app: an older `anchor`/`always`
 project only gains the corner bubble after `render.mjs --sync-template` (which
 overwrites any local Remotion edits — say so first) plus `gen/presenter.mjs --all`.
 
+### The dynamic tutorial recipe (`--style dynamic`)
+
+The engaging cousin of `tutorial`, measured from the best creator tutorials
+(48 shots in 4:28, 2026-09-13): the presenter is still **one continuous
+lip-synced take**, but instead of sitting in a corner it is **re-framed every
+4–6 seconds** — full-frame face, a tall side panel next to the screen, a small
+corner card over it — and every change is a ~0.2s ease-out **move** of the
+frame with the screen content fading in or out beneath it. The screen is never
+the whole window: each beat zooms 2–3× into the element being talked about.
+Captions are always on: a bottom phrase box whose words appear as spoken, one
+word per phrase in an accent box.
+
+What the style seeds (`plan.mjs --init --style dynamic`):
+
+- `presenter.mode = "always"`, `continuousPip = true`, **`takeAspect = "16:9"`**
+  — the take is shot wide because face beats fill the frame; panel and card
+  are crops of the same clip. `gen/presenter.mjs --all` uses
+  `assets/presenter-16x9.png` (or the manifest's `characterImage` when that is
+  the 16:9 file). For a kit character make it once with
+  `still.mjs --edit --from <9x16 portrait> --aspect 16:9` ("same person, head
+  and shoulders centred, eyes on the upper third, background continuing on
+  both sides") so the face stays the same; a description-only project gets one
+  generated. The take comes back at the engine's resolution (~1280×720 for
+  kling): a full-frame face on 1080p is a 1.5× upscale, which is the reference
+  look too.
+- `presenter.frame = { morphMs: 200, pace: "lively", faceFit: "auto" }` —
+  `morphMs` is the move duration (`0` = hard cuts). **`pace` is a direction
+  question — ask it:** `"lively"` is the creator grammar below (a move every
+  4–6s, the rules measure it); `"calm"` (`plan.mjs --init --style dynamic
+  --pace calm`) is a plain step-by-step for people who find the jumping
+  TikTok-coded: `face` for the intro and outro, ONE panel or card layout per
+  step, moves only at step boundaries, focus zooms still welcome. validate()
+  then only caps a hold at 30s. `faceFit` `"auto"` letterboxes a square or
+  9:16 take (centred, full height, background either side) for the full-frame
+  layouts instead of cropping it into a giant face; `"cover"` crops anyway.
+  The side panel is a plain cover-fit of the take (`panelZoom` 1–1.6 pushes
+  in, but that magnifies the presenter's own movement and the face drifts
+  off-centre — leave it alone).
+- `captions.style = "buildup"`, `zoomToClick = false`, `transitions = []`
+  (a transition is an **error** in this style: overlaps drift the take's
+  lip-sync), `targetLengthSec 120`.
+
+Then write the manifest like this:
+
+- **~120s ≈ 300 words** at 2.5 wps. One scene per tutorial step, 10–15s each,
+  demo scenes back to back (no presenter scenes, no b-roll). A closing card is
+  optional; if you keep one give it `"layout": "none"` (scene-level) — the
+  take keeps running underneath, never `pip: false`.
+- **2–3 beats per scene**, each `{ "atSec", "layout"?, "videoStartSec"?,
+  "focus"?, "cut"? }`. `layout` is one of `face | face-band | panel-left |
+  panel-right | card-tl | card-tr | card-bl | card-br | none`; a beat without one inherits
+  the previous layout, so a beat can be a content-only change. `shot` is
+  optional (`screen` by default; `insert` still works; `face`/`split`/`card`
+  are rejected — the presenter is framed by `layout`). Time `atSec` from the
+  `.words.json` timestamps so moves land on clause boundaries.
+- **The first beat of the first scene declares a layout** (usually `face`,
+  ≤3s, the hook/proof) and the first move happens inside 3s.
+- **Mix ≈ 40% face / 40% panel / 20% card**, 20–28 layout shots at 120s,
+  never one layout for more than 12s. validate() warns on all of these; the
+  plan gate and `qa.mjs` print the layout stats.
+- **`focus`** is `{ x, y, w, h }` as fractions of the capture frame — the box
+  around the field/button the narration names, `w` 0.3–0.5 (tighter than 0.3
+  is mush). A focus change on the same running clip glides there over 0.4s;
+  a `videoStartSec` jump (or `"cut": "dissolve"`) is a 0.2s zoom-dissolve to
+  the new moment. Whole-window beats (no focus) are for when the layout is
+  the point; `"framing": "pan" | "cover"` on a beat opts into DemoClip's
+  click-following pan instead of the focus box.
+- **Pick the card corner away from the UI element** being shown; `panel-right`
+  when the interesting UI is on the left. validate() warns when a card sits in
+  the watermark's corner.
+- **Close with ONE spoken CTA** (one ask per video): keep a `card` scene with
+  `logo`, `title`, `cta` (the URL) and give it `"layout": "face-band"` — the
+  presenter fills the top 68% of the frame while the card draws as a band
+  along the bottom (logo left of the title, the URL button under them). The
+  band's crop also hides the stray hand gestures avatar engines put at the
+  bottom of a take. A plain `face` card hides the URL; `none` drops the face.
+- Captions: keep the narration text clean (it goes to TTS); the emphasis word
+  is auto-picked per phrase. Add `captionEmphasis: [{ match, tone }]` on a
+  scene only to override; `captions.autoEmphasis: false` turns the auto pick
+  off.
+- Generate in this order: TTS → captures → `gen/presenter.mjs --all` (once;
+  the take is chunked at scene boundaries above `--take-max-sec` 120 and the
+  avatar re-poses at a chunk seam — build-props warns unless a layout change
+  sits on that second, so start a scene with a new layout there) → render.
+  The plan gate shows the take as one "continuous take" line (~$0.056/s).
+
+Renderer pieces, for the assembly guide: `PresenterFrame.jsx` (the moving
+frame), `DynamicScene.jsx` (the content pane + focus/dissolve), `lib/layouts.js`
+(the geometry), `build-props` (`presenter.layoutTrack`, per-beat resolved
+`layout`, `prevLayout`).
+
 Show the user the plan and the cost before spending anything:
 
 ```bash
@@ -250,7 +361,9 @@ back into `demo.json`. Every later step reads those durations.
 ## 5. Rehearse
 
 Start a session with the MCP tools — `demo_open` for web, `demo_open_app` for a
-macOS app, `demo_open_cli` for a terminal program:
+macOS app, `demo_open_cli` for a terminal program. (No `demo_*` tools in your
+tool list? `node scripts/stage.mjs <name>` drives the same server from the
+shell — `node scripts/stage.mjs tools` lists them; see the top-level `SKILL.md`.)
 
 - `demo_inspect` before clicking. It returns real selectors ranked by durability;
   reading a selector off a screenshot is guessing, and guesses break on replay.

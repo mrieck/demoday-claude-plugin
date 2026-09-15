@@ -15,8 +15,8 @@ Before anything else:
 2. Read the codebase to work out what the software does and what is worth showing.
 3. Ask the user about goal, audience, length — and which named style from the
    catalog in the demo-video skill their video is most like (launch, anchor,
-   tutorial, explainer for 16:9; listicle, cohost, flashcard, glide for 9:16
-   Shorts) —
+   tutorial, dynamic, explainer for 16:9; listicle, cohost, flashcard, glide
+   for 9:16 Shorts) —
    before writing the script. Those answers change the whole video.
 4. Show the cost estimate from `scripts/plan.mjs` and get an explicit yes before
    generating anything.

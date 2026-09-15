@@ -16,7 +16,7 @@
  */
 import path from "node:path";
 import os from "node:os";
-import { mkdir, writeFile, rm } from "node:fs/promises";
+import { mkdir, writeFile, readFile, rm } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
@@ -450,12 +450,104 @@ await main(async () => {
     expectedSec: expectedRuntime(tut),
   });
 
+  // ---- pass 4: a 16:9 dynamic tutorial from the SAME project ---------------
+  // The dynamic style: ONE continuous take (a fake 16:9 clip standing in for
+  // it) re-framed along the beats' layouts — face, side panels, a corner card,
+  // hidden — with the frame morphing between them, focus zooms (one glide on
+  // the same clip), a videoStartSec zoom-dissolve, a beat inheriting its
+  // layout, build-up captions with an authored emphasis word, and a face close.
+  await fakeClip(path.join(dir, "clips", "pip-take-dynamic.mp4"), { seconds: 12, w: 1280, h: 720, pattern: "smptehdbars" });
+  const dyn = manifest.blankManifest({ slug: "selftest-dynamic", name: "Selftest Dynamic" });
+  dyn.format = { width: 960, height: 540, fps: 30 };
+  dyn.style = "dynamic";
+  dyn.presenter.mode = "always";
+  dyn.presenter.continuousPip = true;
+  dyn.presenter.takeAspect = "16:9";
+  dyn.presenter.frame = { morphMs: 200 };
+  dyn.presenter.pipTake = {
+    segments: [{
+      video: "clips/pip-take-dynamic.mp4", audio: "audio/demo.mp3",
+      fromSec: 0, durationSec: 11, videoDurationSec: 12, width: 1280, height: 720, scenes: ["d-hook", "d-step"],
+    }],
+  };
+  dyn.captions = { enabled: true, style: "buildup" };
+  dyn.zoomToClick = false;
+  dyn.transitions = [];
+  dyn.timeline = [
+    {
+      id: "d-hook", kind: "demo", target: "web", durationSec: 6,
+      narration: "Create a project and it appears instantly in your dashboard.",
+      audio: "audio/demo.mp3", words: "audio/demo.words.json",
+      video: "clips/demo.mp4", events: "clips/demo.events.json",
+      captionEmphasis: [{ match: "dashboard", tone: "pos" }],
+      beats: [
+        { atSec: 0, layout: "face" },
+        { atSec: 1.5, layout: "panel-left", focus: { x: 0.1, y: 0.1, w: 0.5, h: 0.5 } },
+        { atSec: 3.5, focus: { x: 0.4, y: 0.3, w: 0.4, h: 0.4 } },      // inherits panel-left; focus glides
+        { atSec: 4.5, layout: "card-br", videoStartSec: 6 },             // zoom-dissolve to a later moment
+      ],
+    },
+    {
+      id: "d-step", kind: "demo", target: "cli", durationSec: 5,
+      narration: "One slash command and the plugin does the rest.",
+      audio: "audio/cli.mp3", words: "audio/cli.words.json",
+      video: "clips/cli.mp4", events: "clips/cli.events.json",
+      beats: [
+        { atSec: 0, layout: "panel-right", framing: "cover" },           // DemoClip path inside the pane
+        { atSec: 2, layout: "none" },
+        { atSec: 3, layout: "face" },
+      ],
+    },
+  ];
+  await manifest.save(dir, dyn, { name: "dynamic.json" });
+
+  const dynCheck = manifest.validate(dyn);
+  if (!dynCheck.ok) throw new Error(`dynamic manifest is invalid:\n  - ${dynCheck.errors.join("\n  - ")}`);
+
+  // Pin the rules: a transition is an error; the take is one pending artifact.
+  const dynBad = structuredClone(dyn);
+  dynBad.transitions = [{ after: "d-hook", type: "fade", ms: 400 }];
+  if (manifest.validate(dynBad).ok) throw new Error("validate() accepted a transition under the dynamic style");
+  const dynProbe = structuredClone(dyn);
+  delete dynProbe.presenter.pipTake;
+  if (!manifest.pending(dir, dynProbe).some((n) => n.needs.includes("pipTake"))) {
+    throw new Error("pending() missed the missing continuous take");
+  }
+
+  const dynamic = await runRenderPass({
+    label: "dynamic",
+    manifestName: "dynamic.json",
+    outName: "selftest-dynamic.mp4",
+    expectW: 960, expectH: 540,
+    expectedSec: expectedRuntime(dyn),
+  });
+
+  // build-props must have flattened the beats into the absolute layout track
+  // the presenter layer renders from, and resolved every beat's layout.
+  const dynProps = JSON.parse(await readFile(path.join(dir, "remotion", "src", "props.json"), "utf8"));
+  const gotTrack = (dynProps.presenter?.layoutTrack || []).map((e) => `${e.layout}@${e.fromSec}-${e.toSec}`);
+  const wantTrack = ["face@0-1.5", "panel-left@1.5-4.5", "card-br@4.5-6", "panel-right@6-8", "none@8-9", "face@9-11"];
+  if (gotTrack.join("|") !== wantTrack.join("|")) {
+    dynamic.ok = false;
+    warn(`dynamic: layout track is ${gotTrack.join(" | ")}, expected ${wantTrack.join(" | ")}`);
+  }
+  const hook = dynProps.timeline.find((s) => s.id === "d-hook");
+  if (hook?.beatLayout !== "dynamic" || hook.beats[2].layout !== "panel-left" || hook.prevLayout !== "face") {
+    dynamic.ok = false;
+    warn(`dynamic: beats not resolved (${hook?.beatLayout}, ${hook?.beats?.[2]?.layout}, prev ${hook?.prevLayout})`);
+  }
+  const step = dynProps.timeline.find((s) => s.id === "d-step");
+  if (step?.prevLayout !== "card-br") {
+    dynamic.ok = false;
+    warn(`dynamic: d-step should inherit card-br, got ${step?.prevLayout}`);
+  }
+
   if (!keep) {
     // Keep the rendered videos but drop the scaffolded node_modules, which is large.
     await rm(path.join(dir, "remotion", "node_modules"), { recursive: true, force: true }).catch(() => {});
   }
 
-  const passes = [landscape, vertical, tutorial];
+  const passes = [landscape, vertical, tutorial, dynamic];
   const ok = passes.every((p) => p.ok);
   report(
     ok

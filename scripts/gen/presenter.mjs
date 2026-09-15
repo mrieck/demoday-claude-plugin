@@ -56,7 +56,12 @@ const USAGE =
  */
 export async function makeCharacter({ projectDir, description, model = "nano-banana-pro", aspect = "1:1", force = false }) {
   const spec = resolve(IMAGE, model);
-  const framing = aspect === "1:1" ? "shoulders visible" : "head and upper body visible";
+  // 16:9 is the dynamic style's take: it is shown full-frame AND cropped into
+  // a tall panel / small card, so the head sits centred with room around it.
+  const framing =
+    aspect === "1:1" ? "shoulders visible"
+      : aspect === "16:9" ? "webcam framing: head and shoulders centered, eyes on the upper third, the background continuing naturally on both sides"
+        : "head and upper body visible";
   const prompt =
     `${description}. Professional headshot for a product video: facing the camera, ` +
     `neutral friendly expression, mouth closed, even soft studio lighting, ` +
@@ -283,6 +288,42 @@ await main(async () => {
     return (facePortraitAbs = r.path);
   }
 
+  /**
+   * Portrait for the continuous take. presenter.takeAspect (seeded "16:9" by
+   * the dynamic style, whose face shots fill the frame) picks the wide still:
+   * the manifest's character image when it is that variant, else
+   * assets/presenter-<aspect>.png, else one generated from the description
+   * (a kit character should get its wide still from still.mjs --edit instead,
+   * so the face stays the same person). Default: the square bottom portrait.
+   */
+  let takePortraitAbs = null;
+  async function takePortrait() {
+    if (takePortraitAbs) return takePortraitAbs;
+    const aspect = m.presenter?.takeAspect || "1:1";
+    if (aspect === "1:1") return (takePortraitAbs = await bottomPortrait());
+    const tag = aspect.replace(":", "x");
+    const ci = m.presenter?.characterImage;
+    if (ci && ci.includes(tag) && existsSync(manifest.resolveIn(projectDir, ci))) {
+      return (takePortraitAbs = manifest.resolveIn(projectDir, ci));
+    }
+    const file = path.join(projectDir, "assets", `presenter-${tag}.png`);
+    if (existsSync(file)) return (takePortraitAbs = file);
+    const description = args.description || m.presenter?.description;
+    if (!description) {
+      throw new Error(
+        `presenter.takeAspect is "${aspect}" but there is no ${manifest.relativeIn(projectDir, file)} and no presenter.description to generate one from. ` +
+        `For a kit character make it with still.mjs --edit --from <portrait> --aspect ${aspect}.`
+      );
+    }
+    if (ci) warn(`presenter.characterImage (${ci}) is not ${aspect} — generating a ${aspect} portrait from the description; a kit character should be reframed with still.mjs --edit instead so the face stays the same.`);
+    info(`  generating the presenter's ${aspect} portrait for the take…`);
+    const r = await makeCharacter({
+      projectDir, description, model: args.image_model || "nano-banana-pro", aspect,
+    });
+    info(`    ${r.cached ? "cached" : "generated"} -> ${manifest.relativeIn(projectDir, r.path)}`);
+    return (takePortraitAbs = r.path);
+  }
+
   // ---- the shots ----
   const engine = args.engine ||
     Object.keys(AVATAR).find((k) => AVATAR[k].endpoint === m.presenter?.engine) ||
@@ -338,7 +379,11 @@ await main(async () => {
     const clipsDir = path.join(projectDir, "clips");
     await mkdir(audioDir, { recursive: true });
     await mkdir(clipsDir, { recursive: true });
-    const portrait = await bottomPortrait();
+    const portrait = await takePortrait();
+    // A sibling manifest (dynamic.json next to demo.json) gets its own take
+    // files, so two cuts of one project never overwrite each other's take.
+    const takeBase = name === manifest.MANIFEST_NAME ? "pip-take" : `pip-take-${path.basename(name, ".json")}`;
+    const wantAspect = m.presenter?.takeAspect || "1:1";
     const segments = [];
     for (const [ci, chunk] of chunks.entries()) {
       // Each scene's narration padded (or trimmed) to exactly its scene duration,
@@ -356,7 +401,7 @@ await main(async () => {
       });
       const concat = chunk.ranges.map((_, i) => `[a${i}]`).join("") + `concat=n=${chunk.ranges.length}:v=0:a=1[out]`;
       const suffix = chunks.length > 1 ? `-${ci + 1}` : "";
-      const audioAbs = path.join(audioDir, `pip-take${suffix}.mp3`);
+      const audioAbs = path.join(audioDir, `${takeBase}${suffix}.mp3`);
       // The avatar cache is keyed on the audio file's bytes, and an mp3 encode
       // is not byte-stable run to run — so only rebuild the take audio when
       // its inputs (the scene narrations and their padded lengths) changed.
@@ -372,7 +417,7 @@ await main(async () => {
         await writeFile(recipeAbs, recipe);
       }
 
-      const videoAbs = path.join(clipsDir, `pip-take${suffix}.mp4`);
+      const videoAbs = path.join(clipsDir, `${takeBase}${suffix}.mp4`);
       info(`  take${suffix}: animating ${fmtDuration(chunk.durationSec)} corner bubble (${engine}, scenes ${chunk.ranges[0].scene.id} → ${chunk.ranges[chunk.ranges.length - 1].scene.id})…`);
       let r;
       try {
@@ -395,12 +440,28 @@ await main(async () => {
       if (meta?.duration && meta.duration + 0.05 < chunk.durationSec) {
         warn(`take${suffix} came back ${meta.duration.toFixed(1)}s for ${chunk.durationSec.toFixed(1)}s of audio — the bubble will freeze at the tail.`);
       }
+      // The engine returns whatever resolution it likes at the portrait's aspect.
+      // A wide take is shown full-frame by the dynamic style, so say when it
+      // came back small or at the wrong shape — those are upscale artefacts.
+      if (meta?.width && meta?.height) {
+        const gotAspect = manifest.aspectOf({ width: meta.width, height: meta.height });
+        info(`    take${suffix} is ${meta.width}x${meta.height} (${gotAspect})`);
+        if (gotAspect !== wantAspect) {
+          warn(`take${suffix} is ${gotAspect} but presenter.takeAspect is ${wantAspect} — full-frame shots will be cropped; use a ${wantAspect} portrait.`);
+        }
+        const compH = m.format?.height || 1080;
+        if (wantAspect === "16:9" && meta.height < Math.min(720, compH)) {
+          warn(`take${suffix} is only ${meta.height}px tall — full-frame face shots will be a ${(compH / meta.height).toFixed(1)}x upscale.`);
+        }
+      }
       segments.push({
         video: manifest.relativeIn(projectDir, r.path),
         audio: manifest.relativeIn(projectDir, audioAbs),
         fromSec: +chunk.fromSec.toFixed(3),
         durationSec: +chunk.durationSec.toFixed(3),
         videoDurationSec: meta?.duration ?? null,
+        width: meta?.width ?? null,
+        height: meta?.height ?? null,
         scenes: chunk.ranges.map((x) => x.scene.id),
       });
     }

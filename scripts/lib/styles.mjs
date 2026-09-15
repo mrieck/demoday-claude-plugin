@@ -76,6 +76,57 @@ export const STYLES = {
       "Recap over the finished state, then a card with the CTA — the bubble stays up through the card",
     ],
   },
+  dynamic: {
+    coverLayout: null,
+    sfxAuto: { transition: "whoosh", card: "riser" },
+    aspect: "16:9",
+    presenterMode: "always",
+    // ONE continuous lip-synced take (like tutorial) — but instead of a fixed
+    // corner bubble it is RE-FRAMED every few seconds: full-frame face, a tall
+    // side panel next to the screen, a small corner card over it. Beats carry
+    // `layout`; the renderer moves the frame between layouts over frame.morphMs
+    // with the screen content fading beneath. Measured from the reference
+    // tutorial (2026-09-13): 48 shots in 268s, ~40% face / ~40% panel / ~20%
+    // card, every move ~0.2s ease-out, content zoomed 2-3x into the element
+    // being discussed, word-by-word captions always on.
+    continuousPip: true,
+    takeAspect: "16:9",        // face shots fill the frame, so the take is shot wide
+    // morphMs: the move; pace "lively" = a move every 4-6s (measured), "calm"
+    // = one layout per step for a plain walkthrough (plan.mjs --pace calm);
+    // faceFit "auto" letterboxes a square/vertical take instead of cropping it.
+    frame: { morphMs: 200, pace: "lively", faceFit: "auto" },
+    zoomToClick: false,        // beats zoom with `focus` instead
+    targetLengthSec: 120,
+    captionsStyle: "buildup",
+    transitionPolicy: "cuts",
+    targetShotSec: [4, 6],
+    usesBeats: true,
+    rules: {
+      layouts: true,           // enables the layout-track checks in validate()/qa
+      openWithinSec: 3,        // first layout change (the hook cut) by this second
+      maxLayoutHoldSec: 12,    // nothing stays in one framing longer
+      calmMaxLayoutHoldSec: 30, // pace "calm": a whole step in one framing is fine, a minute is not
+      targetShots: [20, 28],   // at ~120s; scaled by runtime when shorter
+      layoutMix: { face: 0.4, panel: 0.4, card: 0.2 },
+      mixTolerance: 0.15,
+      closeOnFace: true,       // the CTA is spoken to camera
+      noTransitions: true,     // scene transitions would drift the take's lip-sync
+      focusMinW: 0.3,          // tighter than 30% of the frame is mush
+    },
+    oneLiner: "Dynamic tutorial: one continuous presenter take re-framed every 4-6s (full-face / side panel / corner card) over zoomed-in screen beats, build-up captions always on.",
+    beatSheetHints: [
+      "Default length ~120s (~300 words at 2.5 wps); the take bills avatar-seconds for the whole runtime",
+      "Open on a `face` beat for ≤3s with the hook/proof, then move to `panel-left` over the app",
+      "One scene per tutorial step, 10-15s, with 2-3 layout beats each: { atSec, layout, videoStartSec?, focus? }",
+      "Mix ≈ 40% face / 40% panel / 20% card; never hold one layout past 12s; cut on clause boundaries",
+      "Ask which pace: lively (the creator look above) or calm — presenter.frame.pace \"calm\" (plan.mjs --pace calm) for a plain walkthrough: face for the intro/outro, one panel or card layout per step, moves only at step boundaries",
+      "Every screen beat gets a `focus` box (w 0.3-0.5) around the field/button the narration names; whole-window shots only when the layout is the point",
+      "Pick the card corner AWAY from the UI element being shown; use `layout: \"none\"` (never pip: false) to clear the frame",
+      "A videoStartSec jump inside a layout is a 0.2s zoom-dissolve; a focus change on the same clip glides",
+      "Close with ONE spoken CTA: the CTA card gets `layout: \"face-band\"` — the presenter across the top, logo + title + URL button in a band below (the crop also hides an avatar's stray hands at the bottom of the take)",
+      "Captions are build-up phrases with one boxed emphasis word (auto-picked); add captionEmphasis only to override",
+    ],
+  },
   explainer: {
     coverLayout: null,
     sfxAuto: { insert: "whoosh", stamp: "pop", bullet: "tick", coverExit: "whoosh", transition: "whoosh", card: "riser" },

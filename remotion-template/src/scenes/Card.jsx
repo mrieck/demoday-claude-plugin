@@ -9,7 +9,7 @@ import { typeScale } from "../theme.js";
  * to carry a scene on its own — hence the animated accent rule and the staggered
  * entrance rather than static text on a colour.
  */
-export const Card = ({ scene, theme }) => {
+export const Card = ({ scene, theme, band = null }) => {
   const frame = useCurrentFrame();
   const { fps, width, height } = useVideoConfig();
   const scale = typeScale(width, height);
@@ -20,6 +20,65 @@ export const Card = ({ scene, theme }) => {
   const titleIn = rise(0);
   const subIn = rise(Math.round(fps * 0.18));
   const ruleIn = rise(Math.round(fps * 0.32));
+
+  // Band mode (the dynamic style's `face-band` closer): the presenter owns the
+  // top of the frame, so the card is a strip along the bottom — logo left of
+  // the title, the CTA button under them — on the theme background. The rest
+  // of the frame is the same background, underneath the presenter.
+  if (band) {
+    const bandH = Math.round(height * band);
+    const logoH = Math.round(bandH * 0.26);
+    return (
+      <AbsoluteFill style={{ backgroundColor: theme.bg }}>
+        <div
+          style={{
+            position: "absolute",
+            left: 0, right: 0, bottom: 0,
+            height: bandH,
+            backgroundColor: theme.bg,
+            borderTop: `${Math.max(1, Math.round(2 * scale))}px solid ${theme.primary}55`,
+            display: "flex",
+            flexDirection: "column",
+            justifyContent: "center",
+            alignItems: "center",
+            gap: Math.round(bandH * 0.11),
+          }}
+        >
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: Math.round(logoH * 0.45),
+              opacity: titleIn,
+              transform: `translateY(${interpolate(titleIn, [0, 1], [18, 0])}px)`,
+            }}
+          >
+            {scene.logo ? (
+              <Img src={staticFile(scene.logo)} style={{ height: logoH, width: "auto", borderRadius: Math.round(logoH * 0.22) }} />
+            ) : null}
+            <div style={{ font: `800 ${Math.round(bandH * 0.24)}px/1.1 ${theme.font}`, color: theme.text }}>
+              {scene.title}
+            </div>
+          </div>
+          {scene.cta ? (
+            <div
+              style={{
+                font: `700 ${Math.round(bandH * 0.135)}px ${theme.font}`,
+                color: theme.text,
+                background: theme.primary,
+                padding: `${Math.round(bandH * 0.05)}px ${Math.round(bandH * 0.14)}px`,
+                borderRadius: Math.round(bandH * 0.05),
+                opacity: subIn,
+                transform: `translateY(${interpolate(subIn, [0, 1], [14, 0])}px)`,
+              }}
+            >
+              {scene.cta}
+            </div>
+          ) : null}
+        </div>
+      </AbsoluteFill>
+    );
+  }
 
   return (
     <AbsoluteFill

@@ -26,6 +26,7 @@ import * as manifest from "./lib/manifest.mjs";
 import { STYLES } from "./lib/styles.mjs";
 import { probe, extractFrames } from "./lib/ff.mjs";
 import { referencedCues, buildSfxTrack } from "./lib/sfx.mjs";
+import { buildLayoutTrack, layoutStats } from "./lib/layouts.mjs";
 import { report, info, warn, main, fmtDuration } from "./lib/log.mjs";
 
 const USAGE = "qa.mjs --project <dir> [--manifest <file>] [--video <file>] [--fps 0.5] [--skip-frames]";
@@ -226,6 +227,25 @@ await main(async () => {
     }
   }
 
+  // ---- presenter layouts (dynamic style) -----------------------------------
+  // The moves are what the style is about, and scenedetect can see them but
+  // not the 0.2s content dissolves inside a layout — so the manifest's own
+  // layout track is the pacing number to trust here (validate() already
+  // warned about anything outside the rules).
+  let layouts = null;
+  if (style?.rules?.layouts) {
+    const track = buildLayoutTrack(m.timeline, m.transitions);
+    if (track.length) {
+      layouts = layoutStats(track);
+      const mix = ["face", "panel", "card"].map((g) => `${Math.round((layouts.mix[g] || 0) * 100)}% ${g}`).join(" / ");
+      info(
+        `  layouts: ${layouts.shots} shots, ${layouts.avgShotSec}s average (${mix}); longest hold ` +
+        `${layouts.longest.sec}s (${layouts.longest.layout} at ${layouts.longest.atSec}s); first move at ` +
+        `${layouts.firstChangeSec}s; closes on "${layouts.lastLayout}"`
+      );
+    }
+  }
+
   // ---- report --------------------------------------------------------------
   for (const s of secrets) warn(`possible ${s.kind} in ${s.where} (${s.sample})`);
   for (const i of issues) warn(i);
@@ -250,6 +270,7 @@ await main(async () => {
     frames,
     framesDir,
     pacing,
+    layouts,
     video: existsSync(videoArg) ? videoArg : null,
   });
 });

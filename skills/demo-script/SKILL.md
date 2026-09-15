@@ -79,6 +79,16 @@ Anything that exists only in your context is lost on the next run.
   // plays straight through underneath the cuts.
   // "zoomToClick": false at the top level turns the click push-in off for every
   // demo scene (tutorial default); a scene's own zoomToClick wins.
+  // Dynamic style (--style dynamic): the same continuous take, RE-FRAMED along
+  // the beats' `layout` (see beats below). presenter.takeAspect "16:9" shoots
+  // the take wide (assets/presenter-16x9.png) so face beats fill the frame;
+  // presenter.frame.morphMs (default 200) is how long a move between layouts
+  // takes — 0 for hard cuts; pace "lively" (a move every 4-6s) | "calm" (one
+  // layout per step); faceFit "auto" letterboxes a square/9:16 take for
+  // full-frame layouts | "cover" crops | "contain"; panelZoom 1-1.6 (default 1,
+  // the side panel is a plain cover-fit). No pip block; transitions must be empty.
+  // "presenter": { "mode": "always", "continuousPip": true, "takeAspect": "16:9",
+  //                "frame": { "morphMs": 200, "pace": "lively", "faceFit": "auto" }, ... },
   "music": { "enabled": false, "bed": "assets/bed.mp3", "duckDb": -14 },
   // Optional sound-effect pack (needs ELEVENLABS_API_KEY): named cues fired on
   // events — insert, stamp, face, bullet, coverExit, transition, card,
@@ -87,8 +97,11 @@ Anything that exists only in your context is lost on the next run.
   // "sfx": { "enabled": true, "gain": 0.7, "duckDb": -6,
   //          "cues": { "whoosh": { "prompt": "short fast air whoosh, dry", "durationSec": 0.6, "file": null } },
   //          "auto": { "insert": "whoosh", "stamp": "pop", "face": "hit", "transition": "whoosh" } },
-  // style: "clean" (pill near the bottom edge) or "shorts" (big centered
-  // karaoke for vertical cuts — see the demo-shorts skill)
+  // style: "clean" (pill near the bottom edge), "shorts" (big centered
+  // karaoke for vertical cuts — see the demo-shorts skill), "boxed" (1-3 word
+  // phrase cards, listicle), or "buildup" (dynamic style: bottom phrase box
+  // whose words appear as spoken, one auto-picked word in an accent box —
+  // "autoEmphasis": false turns the pick off; captionEmphasis overrides it)
   "captions": { "enabled": true, "style": "clean" },
   // Optional persistent channel-handle watermark (text and/or a small PNG).
   // position: top-left (default) | top-center | top-right | bottom-left | bottom-right
@@ -130,6 +143,25 @@ picture hard-cuts between windows:
   { "atSec": 4.6, "shot": "insert", "title": "DemoDay", "stamp": "#1" },  // or "image"
   { "atSec": 6.0, "shot": "screen", "videoStartSec": 12 }  // jump the capture
 ]
+```
+
+In the 16:9 **dynamic** style the beats frame the presenter instead (`shot`
+is optional and defaults to `screen`; `face`/`split`/`card` shots are
+rejected there — see the demo-video skill's dynamic recipe):
+
+```jsonc
+"beats": [
+  { "atSec": 0,   "layout": "face" },                                  // full-frame hook, ≤3s
+  { "atSec": 2.4, "layout": "panel-left",                              // presenter left, screen right…
+    "focus": { "x": 0.05, "y": 0.55, "w": 0.45, "h": 0.3 } },          // …zoomed into the chat box
+  { "atSec": 6.0, "focus": { "x": 0.5, "y": 0.1, "w": 0.4, "h": 0.4 } }, // same layout (inherited), focus glides
+  { "atSec": 9.5, "layout": "card-tr", "videoStartSec": 14 }           // move to a corner card + zoom-dissolve to 14s
+]
+// A card scene carries a scene-level layout: "face-band" for the closer (the
+// presenter across the top, the card's logo/title/cta as a band below) or
+// "none" (take runs on underneath, presenter hidden). build-props flattens
+// every layout onto the absolute timeline (presenter.layoutTrack) for the
+// renderer's single presenter layer.
 ```
 
 ### Scene kinds

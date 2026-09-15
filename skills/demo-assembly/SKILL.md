@@ -114,6 +114,14 @@ cover the logo).
 
 Captions only exist for scenes that have a `.words.json`.
 
+`captions.style "buildup"` (the dynamic style) is a black phrase box in the
+bottom band, pre-sized to the whole 1–5 word phrase, whose words are revealed
+as spoken; one word per phrase sits in an accent box — the first word with an
+authored `captionEmphasis` tone, else an automatic pick (longest 5+ letter
+non-function word; `captions.autoEmphasis: false` disables). Never wider than
+52% of the frame, so it clears a corner card on either side. It ignores
+`placement`; it lives in `components/Captions.jsx` next to the others.
+
 ## Watermark
 
 A top-level `"watermark": { "text": "@handle", "image": "assets/logo.png",
@@ -136,6 +144,52 @@ scene — the speaker will freeze" warning from build-props is an editing note:
 the avatar engine quantises clips to 5s/10s, so split the step or shorten the
 narration. Older projects only pick the bubble up after
 `render.mjs --sync-template` (which overwrites local Remotion edits).
+
+## Moving presenter frame (the dynamic style)
+
+With a continuous take (`presenter.pipTake`) **and** a `presenter.layoutTrack`
+in the props, the take renders through `scenes/PresenterFrame.jsx` instead of
+the bubble: one `<OffthreadVideo>` in one positioned div for the life of each
+take segment, whose rect (position, size, corner radius, inner zoom,
+object-position) is recomputed every frame from the track — `face` full-bleed,
+`panel-left/right` a 40%-wide full-height panel (cover-fit only; `presenter.frame.panelZoom` 1–1.6 adds a push-in, but it amplifies the presenter's movement and drifts the face off-centre),
+`card-*` a 24%×47% corner card, `face-band` the face across the top 68% with a
+`card` scene drawn as a bottom band (`Card.jsx` `band` prop: logo + title row,
+CTA button), `none` faded out in place. The element is
+never re-mounted, so lips stay on the narration through every move. A change
+is a **move**: over the first `presenter.frame.morphMs` (200) of an entry the
+rect eases out (`easeOutCubic`) from the previous rect; `morphMs: 0` is a hard
+cut. A take whose aspect differs from the frame's (a square or 9:16 portrait,
+sizes probed into `pipTake.segments[].width/height` by build-props) gets a
+LETTERBOXED `face`/`none` rect — full height, centred, theme background either
+side — rather than a cropped giant face (`presenter.frame.faceFit`: `auto` |
+`cover` | `contain`); panels and cards crop as before. `presenter.frame.pace`
+(`lively` | `calm`) changes nothing in the renderer, only which pacing rules
+validate() applies. Geometry and the maths live in `lib/layouts.js` (`LAYOUT_RECTS`,
+`CONTENT_BOX`, `presenterRectAt`, `focusTransform`); the Node side mirrors the
+names in `scripts/lib/layouts.mjs` and `scripts/selftest-layouts.mjs` pins them.
+
+`build-props` writes `presenter.layoutTrack` (`[{ fromSec, toSec, layout,
+sceneId, beatIndex }]`, absolute seconds, adjacent identical layouts merged)
+from the beats' `layout`, resolves every dynamic beat's inherited `layout`, and
+stamps each dynamic scene with `prevLayout` and `beatLayout: "dynamic"`.
+
+Dynamic scenes render through `scenes/DynamicScene.jsx`: the content pane is
+the box the current layout leaves free (`CONTENT_BOX`: the 59% beside a panel,
+else the full frame), hidden under a face, and its box/opacity morph over the
+same `morphMs` as the frame. Inside it each beat is a `<Sequence>`: `FocusClip`
+cover-fits the capture and zooms into `beat.focus` (a focus change on the same
+running clip glides over 0.4s); a beat with `videoStartSec` or `cut:
+"dissolve"` enters with a 0.2s zoom-dissolve (outgoing window extended and
+scaled up/faded, incoming scaled in on top); `framing: pan|cover` on a beat
+uses `DemoClip` instead; `shot: "insert"` reuses `InsertBeat`. Layer order in
+`DemoVideo.jsx` is scenes → presenter frame → captions → watermark, so a
+full-frame face never swallows the caption (the old bubble rendered above
+captions; it now sits below them too).
+
+Things build-props refuses or warns about here: no take at all under the
+dynamic style (error); a take shorter than the runtime; a chunk seam (the
+avatar re-poses) that does not coincide with a layout change.
 
 ## Diagnosing a bad render
 

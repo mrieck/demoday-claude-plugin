@@ -26,6 +26,8 @@ import * as manifest from "../lib/manifest.mjs";
 import { probe } from "../lib/ff.mjs";
 import { minSceneDuration, gapAfter, transitionAfterSec } from "../lib/pacing.mjs";
 import { buildSfxTrack } from "../lib/sfx.mjs";
+import { STYLES } from "../lib/styles.mjs";
+import { buildLayoutTrack, layoutBefore } from "../lib/layouts.mjs";
 import { report, info, warn, main, fmtDuration } from "../lib/log.mjs";
 
 const USAGE = "build-props.mjs --project <dir> [--manifest <file>] [--out <props.json>] [--lenient]";
@@ -215,6 +217,13 @@ export async function buildProps(projectDir, { lenient = false, name = manifest.
     // for every demo scene that does not decide for itself.
     if (scene.kind === "demo" && scene.zoomToClick == null && m.zoomToClick === false) out.zoomToClick = false;
 
+    // Dynamic style: beat scenes render through DynamicScene (content pane
+    // under a moving presenter frame) unless the scene chose another layout.
+    if (scene.kind === "demo" && scene.beats?.length && !scene.beatLayout &&
+        (STYLES[m.style]?.rules?.layouts || scene.beats.some((b) => b.layout))) {
+      out.beatLayout = "dynamic";
+    }
+
     // Inline the event log so DemoClip can zoom toward clicks.
     if (scene.events) {
       const ev = await readJson(manifest.resolveIn(projectDir, scene.events));
@@ -262,6 +271,69 @@ export async function buildProps(projectDir, { lenient = false, name = manifest.
 
   if (m.watermark?.image && !existsSync(manifest.resolveIn(projectDir, m.watermark.image))) {
     problems.push(`watermark image not found at ${m.watermark.image}`);
+  }
+
+  /**
+   * Presenter layout track (dynamic style). Beats declare `layout` scene-
+   * relatively; the renderer's single presenter layer needs it on the absolute
+   * timeline, and each dynamic scene needs to know what it inherits, so both
+   * are resolved here — on the reconciled durations — and inlined.
+   */
+  let presenter = m.presenter;
+  const dynamicScenes = timeline.filter((s) => s.beatLayout === "dynamic");
+  const isDynamicStyle = !!STYLES[m.style]?.rules?.layouts;
+  if (dynamicScenes.length || isDynamicStyle) {
+    const track = buildLayoutTrack(timeline, m.transitions);
+    const starts = new Map();
+    let cursor = 0;
+    for (const [i, sc] of timeline.entries()) {
+      starts.set(sc.id, cursor);
+      cursor += sc.durationSec || 0;
+      if (i < timeline.length - 1) cursor -= transitionAfterSec(m, sc.id);
+    }
+    const runtime = cursor;
+    for (const sc of timeline) {
+      if (sc.beatLayout !== "dynamic") continue;
+      const prev = layoutBefore(track, starts.get(sc.id));
+      sc.prevLayout = prev;
+      let running = prev;
+      sc.beats = sc.beats.map((b) => {
+        if (b.layout) running = b.layout;
+        return { ...b, layout: running };
+      });
+    }
+    const segs = (m.presenter?.pipTake?.segments || []).map((s) => ({ ...s }));
+    // The frame letterboxes a take whose aspect differs from the frame's
+    // (rectFor in lib/layouts.js), so every segment needs its size; older
+    // takes were saved without one — probe them here.
+    for (const seg of segs) {
+      if (seg.width && seg.height) continue;
+      const abs = manifest.resolveIn(projectDir, seg.video);
+      const meta = existsSync(abs) ? await probe(abs).catch(() => null) : null;
+      if (meta?.width && meta?.height) { seg.width = meta.width; seg.height = meta.height; }
+    }
+    presenter = { ...m.presenter, layoutTrack: track, ...(segs.length ? { pipTake: { ...m.presenter.pipTake, segments: segs } } : {}) };
+    if (m.presenter?.mode === "always") {
+      if (!segs.length) {
+        const msg = `no continuous presenter take (presenter.pipTake) — the ${m.style || "dynamic"} style is the presenter re-framed over the screen; run gen/presenter.mjs --all`;
+        if (isDynamicStyle) problems.push(msg); else warn(msg);
+      } else {
+        for (const seg of segs) {
+          if (!existsSync(manifest.resolveIn(projectDir, seg.video))) problems.push(`presenter take not found at ${seg.video}`);
+        }
+        const covered = segs.reduce((s, x) => s + (x.durationSec || 0), 0);
+        if (covered + 0.25 < runtime) {
+          warn(`the presenter take covers ${fmtDuration(covered)} of a ${fmtDuration(runtime)} video — the frame will be empty past its end; re-run gen/presenter.mjs --all`);
+        }
+        // A chunk seam re-poses the avatar; it hides inside a layout move.
+        for (const seg of segs.slice(1)) {
+          const onMove = track.some((e) => Math.abs(e.fromSec - seg.fromSec) < 0.06);
+          if (!onMove) {
+            warn(`presenter take segment starts at ${seg.fromSec.toFixed(2)}s with no layout change there — the avatar will visibly re-pose; start a beat with a different layout at that second`);
+          }
+        }
+      }
+    }
   }
 
   // The frame-0 hook card. Defaults are resolved here, not in the component, so
@@ -336,7 +408,8 @@ export async function buildProps(projectDir, { lenient = false, name = manifest.
     slug: m.slug,
     format: m.format,
     brand: m.brand,
-    presenter: m.presenter,
+    style: m.style || null,
+    presenter,
     music: m.music,
     captions: m.captions,
     watermark: m.watermark,

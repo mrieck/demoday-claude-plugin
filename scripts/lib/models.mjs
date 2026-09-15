@@ -211,7 +211,19 @@ export function estimateCost(m) {
       presenterMode === "always" && s.kind === "demo" &&
       !s.beats?.length && s.pip !== false &&
       s.bottom?.kind !== "presenter";
-    const presenterScenes = (m.timeline || []).filter(
+    // A continuous take (tutorial / dynamic styles) is ONE clip covering every
+    // scene that did not opt out, beats or not — cards included, since the take
+    // runs under them. It is the dominant line item, so it is counted as such.
+    const continuous = presenterMode === "always" && !!m.presenter?.continuousPip;
+    if (continuous) {
+      const takeSec = (m.timeline || []).filter((s) => s.pip !== false).reduce((sum, s) => sum + (s.durationSec || 8), 0);
+      if (takeSec) {
+        const usd = takeSec * engine.approxUsdPerSecond;
+        lines.push({ item: "presenter", detail: `${Math.round(takeSec)}s continuous take`, usd });
+        total += usd;
+      }
+    }
+    const presenterScenes = continuous ? [] : (m.timeline || []).filter(
       (s) =>
         s.kind === "presenter" ||
         (s.kind === "demo" &&
