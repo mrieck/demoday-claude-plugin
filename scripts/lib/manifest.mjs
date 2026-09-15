@@ -117,7 +117,7 @@ export const PIP_POSITIONS = ["top-left", "top-right", "bottom-left", "bottom-ri
  * Layout and accent are meant to be rotated per video so the channel grid varies.
  */
 export const COVER_LAYOUTS = ["stack", "band", "corner", "stripe"];
-export const COVER_EXITS = ["wipe-up", "dissolve", "slide-left", "cut"];
+export const COVER_EXITS = ["wipe-up", "wipe-down", "dissolve", "slide-left", "cut"];
 export const COVER_DEFAULTS = { layout: "stack", exit: "wipe-up", holdSec: 0.5, outSec: 0.5 };
 /**
  * cover.kind:
@@ -138,7 +138,9 @@ export const COVER_FRAME_DEFAULTS = { kind: "frame", exit: "cut", holdSec: 0.45,
  *   "overlay" — the band: the video's REAL first frame is the background and is
  *             already playing; an accent band carrying `hook` (+ `kicker`,
  *             `portrait`) sits across `top`..`top+height` (fractions of the
- *             frame, default 0.22..0.46 — inside every profile-grid crop and
+ *             frame, default 0.22..0.46 on vertical (on landscape the
+ *             renderer puts it in the lower third, 0.58..0.88, clear of a
+ *             full-frame face) — inside every profile-grid crop and
  *             over the demo pane of an anchored split, clear of the face),
  *             holds `holdSec`, then slides up and off over `outSec`. Captions
  *             are hidden while it is up. The listicle default.
@@ -708,8 +710,11 @@ export function validate(manifest) {
       if (first?.durationSec != null && coverSec > first.durationSec) {
         push(warnings, `cover (${coverSec}s) outlasts the first scene "${first.id}" (${first.durationSec}s) — it will cover a scene cut`);
       }
-      if (fmt.width && fmt.height && fmt.width > fmt.height) {
-        push(warnings, "cover is set on a landscape video — it exists for vertical Shorts, where platforms take frame 0 as the thumbnail");
+      // A full hook CARD on landscape is odd (YouTube picks its own thumbnail);
+      // the band OVERLAY is fine there — frame 0 is the poster of every README
+      // or embedded player, and the dynamic style opens with it.
+      if (fmt.width && fmt.height && fmt.width > fmt.height && kind !== "overlay") {
+        push(warnings, "a full cover card on a landscape video — YouTube picks its own thumbnail; use cover.kind \"overlay\" (the hook band over the real first frame) if you want a poster frame for embeds");
       }
     }
   }

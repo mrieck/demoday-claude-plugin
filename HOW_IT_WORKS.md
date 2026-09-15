@@ -143,7 +143,7 @@ Source 3 is the same idea as a dotfile, just outside the plugin:
 plugin lives in a version-pinned directory:
 
 ```
-~/.claude/plugins/cache/<marketplace>/demoday/0.2.0/
+~/.claude/plugins/cache/<marketplace>/demoday/0.2.1/
 ```
 
 Publishing `0.2.0` creates a *new* directory beside it, so a `.env` you wrote

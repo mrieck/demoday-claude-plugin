@@ -108,9 +108,11 @@ Anything that exists only in your context is lost on the next run.
   // — the insets already avoid the zones platform UI covers on vertical video.
   // Opt a scene out with "watermark": false on the scene (e.g. the CTA card).
   // "watermark": { "text": "@handle", "position": "top-left", "opacity": 0.55 },
-  // Vertical only: the hook card that IS frame 0 — the thumbnail every platform
+  // Vertical (and the 16:9 dynamic style, kind "overlay" only — frame 0 is the
+  // poster of a README embed): the hook card that IS frame 0 — the thumbnail every platform
   // shows — held ~0.5s then wiped away over the first scene. See demo-shorts §2b.
-  // layout: stack | band | corner | stripe   exit: wipe-up | dissolve | slide-left
+  // layout: stack | band | corner | stripe   exit: wipe-up | wipe-down | dissolve | slide-left
+  // (a landscape overlay defaults to the lower third and wipe-down, clear of the face)
   // "cover": { "hook": "You use AI for all your coding.", "kicker": "AI tech stack",
   //            "layout": "band", "accent": "#8B5CF6", "portrait": "assets/cover-mark.png" },
   // — or a frozen frame of the video itself instead of a card (no hook text):

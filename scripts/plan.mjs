@@ -118,7 +118,9 @@ await main(async () => {
     // Vertical cuts scaffold a frame-0 hook card (the thumbnail every platform
     // shows). hook is left empty on purpose: validate() refuses to render until
     // it is written, so a Short cannot ship with the presenter's face as its cover.
-    if (vertical) {
+    // A landscape style can ask for one too (dynamic: the band overlay is the
+    // poster frame of a README embed).
+    if (vertical || style?.coverKind === "overlay") {
       m.cover = style?.coverKind === "overlay"
         ? { kind: "overlay", hook: "", kicker: "" }
         : { hook: "", kicker: "", layout: style?.coverLayout || manifest.COVER_DEFAULTS.layout };

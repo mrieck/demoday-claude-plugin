@@ -1,6 +1,6 @@
 {
   "name": "demoday",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "private": true,
   "type": "module",
   "description": "Tools for Claude to record, narrate, and assemble software demo videos.",

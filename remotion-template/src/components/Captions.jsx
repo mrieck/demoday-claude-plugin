@@ -221,10 +221,12 @@ const BuildupCaptions = ({ words, theme, t, fps, width, height, emphasis, autoEm
     return entry;
   });
 
+  // The box appears WITH its first word (same 0.05s lead), never as an empty
+  // black box a frame or two before the word lands.
   let active = null;
   for (let i = 0; i < withBase.length; i++) {
-    const start = withBase[i].phrase.startSec - 0.08;
-    const end = i < withBase.length - 1 ? withBase[i + 1].phrase.startSec - 0.08 : withBase[i].phrase.endSec + 0.35;
+    const start = withBase[i].phrase.startSec - 0.05;
+    const end = i < withBase.length - 1 ? withBase[i + 1].phrase.startSec - 0.05 : withBase[i].phrase.endSec + 0.35;
     if (t >= start && t < end) { active = { ...withBase[i], start }; break; }
   }
   if (!active) return null;

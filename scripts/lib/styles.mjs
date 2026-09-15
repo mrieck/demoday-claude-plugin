@@ -78,6 +78,10 @@ export const STYLES = {
   },
   dynamic: {
     coverLayout: null,
+    // Frame 0 is the poster of every README/embedded player, so the style
+    // scaffolds the hook band over the real first frame (validate() refuses
+    // to render until cover.hook is written; delete the block to opt out).
+    coverKind: "overlay",
     sfxAuto: { transition: "whoosh", card: "riser" },
     aspect: "16:9",
     presenterMode: "always",

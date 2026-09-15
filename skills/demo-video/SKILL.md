@@ -262,6 +262,13 @@ Then write the manifest like this:
   `.words.json` timestamps so moves land on clause boundaries.
 - **The first beat of the first scene declares a layout** (usually `face`,
   ≤3s, the hook/proof) and the first move happens inside 3s.
+- **Frame 0 is a hook band, not a blank frame.** The style scaffolds
+  `cover: { kind: "overlay", hook, kicker, accent?, portrait? }` — the band
+  over the real first frame (the face), held 0.5s then slid away. Write the
+  hook (≤ 60 chars, the claim), a short kicker, and point `portrait` at a
+  square still of the presenter (`assets/cover-mark.png`). This is the poster
+  of every README / embedded player, which otherwise shows whatever frame 0
+  happens to be. Delete the block to opt out.
 - **Mix ≈ 40% face / 40% panel / 20% card**, 20–28 layout shots at 120s,
   never one layout for more than 12s. validate() warns on all of these; the
   plan gate and `qa.mjs` print the layout stats.

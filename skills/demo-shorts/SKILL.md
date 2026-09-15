@@ -210,7 +210,7 @@ the first scene while the narration is already running underneath.
   "accent": "#8B5CF6",                          // defaults to brand.colors.primary
   "portrait": "assets/cover-mark.png",          // optional circular presenter portrait
   "holdSec": 0.5, "outSec": 0.5,                // fully visible, then the exit
-  "exit": "wipe-up"                             // wipe-up | dissolve | slide-left
+  "exit": "wipe-up"                             // wipe-up | wipe-down | dissolve | slide-left
 }
 ```
 

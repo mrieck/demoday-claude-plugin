@@ -19,6 +19,7 @@ import { typeScale } from "../theme.js";
 
 const EXITS = {
   "wipe-up": (p, w, h) => ({ transform: `translateY(${-h * p}px)` }),
+  "wipe-down": (p, w, h) => ({ transform: `translateY(${h * p}px)` }),
   "slide-left": (p, w) => ({ transform: `translateX(${-w * p}px)` }),
   dissolve: (p) => ({ opacity: 1 - p }),
   cut: () => ({}),
@@ -243,15 +244,25 @@ export const BandOverlay = ({ cover, theme, fps }) => {
     extrapolateLeft: "clamp", extrapolateRight: "clamp", easing: Easing.inOut(Easing.cubic),
   });
   const accent = /^#[0-9a-f]{6}$/i.test(cover.accent || "") ? cover.accent : theme.primary;
-  const top = (cover.top ?? 0.22) * height;
-  const bandH = (cover.height ?? 0.24) * height;
+  // Landscape (a 16:9 dynamic tutorial: frame 0 is the poster of every README
+  // embed) opens on the presenter's face, so the band sits in the lower third
+  // — over the shoulders, clear of the eyes and mouth. The vertical defaults
+  // are tuned to the profile-grid crop over a demo pane.
+  const landscape = width > height;
+  const top = (cover.top ?? (landscape ? 0.58 : 0.22)) * height;
+  const bandH = (cover.height ?? (landscape ? 0.30 : 0.24)) * height;
   // Exit: the band leaves upward, off the top edge (the demo pane keeps moving
-  // underneath); slide-left / dissolve / cut also supported.
-  const exit = cover.exit === "slide-left" ? { transform: `translateX(${-width * p}px)` }
-    : cover.exit === "dissolve" ? { opacity: 1 - p }
-    : cover.exit === "cut" ? {}
+  // underneath); on landscape it sits low, so it leaves DOWNWARD by default
+  // rather than sliding up across the face. slide-left / dissolve / cut too.
+  const exitKind = cover.exit || (landscape ? "wipe-down" : "wipe-up");
+  const exit = exitKind === "slide-left" ? { transform: `translateX(${-width * p}px)` }
+    : exitKind === "dissolve" ? { opacity: 1 - p }
+    : exitKind === "cut" ? {}
+    : exitKind === "wipe-down" ? { transform: `translateY(${(height - top) * p}px)` }
     : { transform: `translateY(${-(top + bandH) * p}px)` };
-  const portrait = Math.round(width * 0.16);
+  // The portrait never outgrows the band it sits in.
+  const portrait = Math.round(Math.min(width * 0.16, bandH * 0.78));
+  const hookScale = landscape ? 0.74 : 0.82;
   return (
     <AbsoluteFill style={{ pointerEvents: "none", ...exit }}>
       <div
@@ -267,7 +278,7 @@ export const BandOverlay = ({ cover, theme, fps }) => {
       >
         <div style={{ flex: 1, minWidth: 0 }}>
           <Kicker text={cover.kicker} accent={theme.bg} s={s} font={theme.font} style={{ marginBottom: Math.round(14 * s), opacity: 0.8 }} />
-          <div style={{ font: `800 ${Math.round(hookPx(cover.hook, s) * 0.82)}px/1.04 ${theme.font}`, color: theme.bg, textAlign: "left", textWrap: "balance" }}>
+          <div style={{ font: `800 ${Math.round(hookPx(cover.hook, s) * hookScale)}px/1.04 ${theme.font}`, color: theme.bg, textAlign: "left", textWrap: "balance" }}>
             {cover.hook}
           </div>
         </div>

@@ -179,7 +179,9 @@ export const DemoVideo = (props) => {
           captions: a full-frame face layout must not swallow the caption. */}
       {pipTake
         ? pipTake.map((seg, i) => {
-            const from = secToFrames(seg.fromSec, fps);
+            // Not secToFrames: that clamps to >= 1 and would leave frame 0 —
+            // the poster frame of every embed — without the presenter.
+            const from = Math.max(0, Math.round(seg.fromSec * fps));
             const frames = Math.min(secToFrames(seg.durationSec, fps), Math.max(0, total - from));
             return (
               <Sequence key={`pip-${i}`} from={from} durationInFrames={frames}>

@@ -373,7 +373,12 @@ export async function buildProps(projectDir, { lenient = false, name = manifest.
     if (m.cover.portrait && !existsSync(manifest.resolveIn(projectDir, m.cover.portrait))) {
       problems.push(`cover portrait not found at ${m.cover.portrait}`);
     }
-    cover = { ...manifest.COVER_OVERLAY_DEFAULTS, accent: m.brand?.colors?.primary || "#5B8DEF", ...m.cover, kind: "overlay" };
+    // The default band position is the vertical one (over the demo pane of a
+    // Short); on landscape the component places the band in the lower third,
+    // clear of the face, unless the manifest sets top/height itself.
+    const { top: _t, height: _h, exit: _e, ...overlayDefaults } = manifest.COVER_OVERLAY_DEFAULTS;
+    const landscape = (m.format?.width || 0) > (m.format?.height || 0);
+    cover = { ...(landscape ? overlayDefaults : manifest.COVER_OVERLAY_DEFAULTS), accent: m.brand?.colors?.primary || "#5B8DEF", ...m.cover, kind: "overlay" };
   } else if (m.cover) {
     if (!m.cover.hook) problems.push("cover.hook is empty — write the hook line for the frame-0 card (or remove cover)");
     if (m.cover.portrait && !existsSync(manifest.resolveIn(projectDir, m.cover.portrait))) {
