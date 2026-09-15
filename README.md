@@ -23,10 +23,9 @@ Copilot, Gemini CLI and every other agent that can run a shell — see
 
 ## 🎬 See it in action
 
-https://github.com/user-attachments/assets/18bf039d-789f-4685-91fe-96c1b051cb4d
+https://github.com/user-attachments/assets/5f23659e-1ee3-43a7-b635-5117d7509740
 
-*Sample demo video of Overboard, another Claude Plugin (project dashboard), narrated and
-edited entirely by DemoDay, including the sea-captain voiceover using ElevenLabs.*
+*Sample demo video of SocialCue, another Claude Plugin, this is "Dynamic Tutorial" Type.*
 
 ## 📱 Shorts
 
