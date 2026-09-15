@@ -24,6 +24,8 @@ import { MacSession } from "../scripts/capture/mac-session.mjs";
 import { CliSession } from "../scripts/capture/cli-session.mjs";
 import { imageToScreen } from "../scripts/capture/mac-input.mjs";
 import { blankScript } from "../scripts/lib/actions.mjs";
+import { parseArgs } from "../scripts/lib/args.mjs";
+import { UnixSocketServerTransport } from "./socket-transport.mjs";
 
 /** Max width we hand back to the model. Bigger costs tokens and buys nothing. */
 const SCREENSHOT_MAX_WIDTH = 1400;
@@ -656,12 +658,35 @@ server.registerTool(
 // ---------------------------------------------------------------------------
 
 // A crashed or cancelled session must not leave an orphaned browser running.
+let activeTransport = null;
 for (const sig of ["SIGINT", "SIGTERM"]) {
   process.on(sig, async () => {
     if (state.session) await state.session.close().catch(() => {});
+    if (activeTransport) await activeTransport.close().catch(() => {});
     process.exit(0);
   });
 }
 
-const transport = new StdioServerTransport();
-await server.connect(transport);
+const argv = parseArgs(process.argv.slice(2));
+
+if (argv.socket) {
+  // Daemon mode for agents without an MCP client: scripts/stage.mjs starts this
+  // once and then talks to it over the socket, one tool call per invocation. The
+  // daemon exits on its own after a quiet stretch so a forgotten rehearsal does
+  // not keep a browser open all day.
+  const transport = new UnixSocketServerTransport(String(argv.socket));
+  activeTransport = transport;
+  const idleMs = (Number(argv["idle-min"]) || 30) * 60_000;
+  await server.connect(transport);
+  console.error(`demo-stage listening on ${argv.socket} (pid ${process.pid}, idle exit after ${idleMs / 60_000} min)`);
+  setInterval(async () => {
+    if (Date.now() - transport.lastActivity < idleMs) return;
+    console.error("demo-stage idle — closing the session and exiting");
+    if (state.session) await state.session.close().catch(() => {});
+    await transport.close().catch(() => {});
+    process.exit(0);
+  }, 30_000).unref();
+} else {
+  const transport = new StdioServerTransport();
+  await server.connect(transport);
+}

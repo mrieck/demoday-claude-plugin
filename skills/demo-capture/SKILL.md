@@ -12,8 +12,9 @@ description: >-
 
 ## Rehearse, then perform
 
-The rehearsal session (`demo_*` MCP tools) is for figuring things out. The
-performance runner replays what you found, smoothly, while recording.
+The rehearsal session (`demo_*` MCP tools, or `node scripts/stage.mjs <name>`
+from the shell when the tools are not in your tool list) is for figuring things
+out. The performance runner replays what you found, smoothly, while recording.
 
 Consequences worth internalising:
 

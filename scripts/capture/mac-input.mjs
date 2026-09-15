@@ -14,6 +14,11 @@
  */
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
+import { readFile, access, rename } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { fileURLToPath } from "node:url";
+import os from "node:os";
+import path from "node:path";
 import * as motion from "../lib/cursor.mjs";
 
 const execFileAsync = promisify(execFile);
@@ -167,13 +172,29 @@ export async function key(spec) {
   }
 }
 
-/** Eased scroll via repeated wheel ticks. */
+let scrollHelper;
+async function nativeScrollHelper() {
+  if (!scrollHelper) scrollHelper = (async () => {
+    const source = fileURLToPath(new URL("./mac-scroll.swift", import.meta.url));
+    const hash = createHash("sha256").update(await readFile(source)).digest("hex").slice(0, 16);
+    const binary = path.join(os.tmpdir(), `demoday-scroll-${process.arch}-${hash}`);
+    try { await access(binary); }
+    catch {
+      const temporary = `${binary}-${process.pid}`;
+      await execFileAsync("swiftc", [source, "-o", temporary], { timeout: 120_000 });
+      await rename(temporary, binary);
+    }
+    return binary;
+  })().catch((error) => { scrollHelper = null; throw error; });
+  return scrollHelper;
+}
+
+/** Eased pixel scrolling. cliclick's w: command is WAIT, not a wheel event. */
 export async function scroll(dy, { durationMs = 700 } = {}) {
-  const ticks = Math.max(1, Math.round(Math.abs(dy) / 40));
-  const dir = dy > 0 ? -1 : 1; // cliclick: positive scrolls up
-  const per = durationMs / ticks;
-  for (let i = 0; i < ticks; i++) {
-    await cliclick(`w:${dir * 3}`);
-    await motion.sleep(per);
-  }
+  if (!Number.isFinite(dy) || !Number.isFinite(durationMs)) throw new Error("Scroll distance and duration must be finite");
+  if (dy === 0) return;
+  const helper = await nativeScrollHelper();
+  await execFileAsync(helper, [String(Math.round(dy)), String(Math.max(0, Math.round(durationMs)))], {
+    timeout: Math.max(15_000, durationMs + 5000),
+  });
 }

@@ -16,6 +16,11 @@ on-camera presenter. One command, about the cost of a coffee. macOS only.
 /demoday:create-demo-video
 ```
 
+Not on Claude Code? DemoDay also installs as a **Codex plugin** and as an
+**agent skill** (`npx skills add mrieck/demoday-claude-plugin`) for Cursor,
+Copilot, Gemini CLI and every other agent that can run a shell — see
+[Install](#-install).
+
 ## 🎬 See it in action
 
 https://github.com/user-attachments/assets/18bf039d-789f-4685-91fe-96c1b051cb4d
@@ -54,10 +59,14 @@ timed to the narration word by word.*
 - 🧑‍💼 **Optional on-camera presenter** — an AI presenter for the intro, outro
   and cutaways, lip-synced to the same voice as the narration.
 - 🧭 **Wide videos in named styles too** — `launch` (classic promo), `anchor`
-  (avatar-led), `explainer` (no face), or `tutorial`: a step-by-step walkthrough
+  (avatar-led), `explainer` (no face), `tutorial`: a step-by-step walkthrough
   with the full workflow on screen and the presenter riding along as a corner
   bubble — one continuous lip-synced take that stays up through every cut
-  (circle or rounded square, any corner; bottom-right by default).
+  (circle or rounded square, any corner; bottom-right by default) — or
+  `dynamic`: the same continuous take re-framed every few seconds (full-frame
+  face, tall side panel, corner card) with animated moves between them, the
+  screen zoomed into the element being explained, and build-up captions
+  always on.
 - 🗣️ **Custom character voices** — describe a voice in plain English
   (*"weathered lobster-boat captain, thick coastal accent"*) and the whole demo
   is narrated in it.
@@ -95,8 +104,48 @@ Desktop scrolling also needs Xcode Command Line Tools (`xcode-select --install`)
 The capture tool compiles a small native scroll helper once and caches it in the
 temporary directory; `doctor.mjs` checks that the Swift compiler is available.
 
-> **Requirements:** macOS and [Claude Code](https://claude.com/claude-code). The
-> only thing Claude can't do for you is the two steps below.
+> **Requirements:** macOS and [Claude Code](https://claude.com/claude-code) —
+> or Codex, or any agent that can run a shell (both below). The only thing the
+> agent can't do for you is the two steps that follow.
+
+<details>
+<summary><b>Codex</b></summary>
+
+DemoDay ships a Codex plugin manifest (`.codex-plugin/`), so the same repo
+installs into Codex with its skills and the `demo-stage` MCP server:
+
+```bash
+codex plugin marketplace add mrieck/demoday-claude-plugin
+codex plugin add demoday@demoday
+```
+
+Then, in a Codex session in the repo you want filmed, ask for a demo video
+(the `demo-video` skill) and let it run the preflight — `node
+scripts/doctor.mjs --install` inside the plugin directory — which installs
+the Node packages and Chromium the MCP server needs. Reload plugins or restart
+Codex once after that so the server starts with its packages present.
+
+</details>
+
+<details>
+<summary><b>Cursor, Copilot, Gemini CLI, OpenCode… (any agent, via <code>npx skills</code>)</b></summary>
+
+The repo is also a self-contained [agent skill](https://skills.sh) — one folder
+with the scripts, the rehearsal server and the craft guides:
+
+```bash
+npx skills add mrieck/demoday-claude-plugin        # pick your agent(s) when prompted
+npx skills add mrieck/demoday-claude-plugin -g -a cursor -a codex -y   # or non-interactively
+```
+
+Then ask your agent for a demo video. The skill tells it to run
+`node scripts/doctor.mjs --install` first, and to drive the app either through
+the `demo-stage` MCP server (if your agent supports MCP — one line of config,
+shown in the skill) or through `node scripts/stage.mjs`, a shell client for
+the very same server. Every capability is identical; only the way the agent
+reaches the rehearsal tools differs.
+
+</details>
 
 ### 1. Add your fal.ai key (required)
 

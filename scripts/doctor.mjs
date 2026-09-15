@@ -6,6 +6,7 @@
  *
  *   node scripts/doctor.mjs              # everything
  *   node scripts/doctor.mjs --target web # only what a web demo needs
+ *   node scripts/doctor.mjs --install    # also npm-install missing packages and Chromium
  *
  * stdout: one JSON line { ok, checks: [...] }
  * stderr: a human table with exact remediation commands
@@ -15,7 +16,7 @@
 import { existsSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { execFile } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import { promisify } from "node:util";
 import { parseArgs } from "./lib/args.mjs";
 import { loadDotenv, secretSource, KEYCHAIN_SERVICE } from "./lib/env.mjs";
@@ -30,6 +31,20 @@ loadDotenv();
 
 const args = parseArgs(process.argv.slice(2));
 const target = args.target || "all"; // all | web | mac | cli
+const install = Boolean(args.install);
+
+/** Run an installer, streaming its output to stderr so stdout stays one JSON line. */
+function sh(cmd, argv, cwd) {
+  return new Promise((resolve) => {
+    console.error(`  $ ${cmd} ${argv.join(" ")}   (in ${cwd})`);
+    const child = spawn(cmd, argv, { cwd, stdio: ["ignore", 2, 2] });
+    child.on("exit", (code) => resolve(code === 0));
+    child.on("error", (e) => {
+      console.error(`  could not run ${cmd}: ${e.message}`);
+      resolve(false);
+    });
+  });
+}
 
 /** Does this check matter for the selected target? */
 function needed(scope) {
@@ -86,6 +101,11 @@ async function run() {
   });
 
   const deps = ["@fal-ai/client", "playwright", "sharp", "@modelcontextprotocol/sdk"];
+  if (install) {
+    const missingNow = [];
+    for (const d of deps) if (!(await checkNodeDep(d))) missingNow.push(d);
+    if (missingNow.length) await sh("npm", ["install", "--no-audit", "--no-fund"], PLUGIN_ROOT);
+  }
   const missingDeps = [];
   for (const d of deps) if (!(await checkNodeDep(d))) missingDeps.push(d);
   add({
@@ -168,7 +188,8 @@ async function run() {
   if (needed("web")) {
     let browsersOk = false;
     let browserDetail = "playwright not installed";
-    if (await checkNodeDep("playwright")) {
+    const probeChromium = async () => {
+      if (!(await checkNodeDep("playwright"))) return;
       try {
         const { chromium } = await import("playwright");
         const exe = chromium.executablePath();
@@ -177,6 +198,11 @@ async function run() {
       } catch (e) {
         browserDetail = e.message;
       }
+    };
+    await probeChromium();
+    if (install && !browsersOk && (await checkNodeDep("playwright"))) {
+      await sh("npx", ["playwright", "install", "chromium"], PLUGIN_ROOT);
+      await probeChromium();
     }
     add({
       name: "playwright chromium",
@@ -211,6 +237,20 @@ async function run() {
     });
 
     if (isMac) {
+      const swiftcPath = await which("swiftc");
+      let swiftOk = false;
+      if (swiftcPath) {
+        swiftOk = await execFileAsync(swiftcPath, ["--version"], { timeout: 15_000 })
+          .then(() => true, () => false);
+      }
+      add({
+        name: "Swift compiler (scroll helper)",
+        scope: "mac",
+        required: true,
+        ok: swiftOk,
+        detail: swiftOk ? swiftcPath : "Xcode Command Line Tools not available",
+        fix: "xcode-select --install",
+      });
       // These two are the single most common reason a desktop demo silently
       // produces a black video or clicks that go nowhere.
       const screen = await checkScreenRecording();

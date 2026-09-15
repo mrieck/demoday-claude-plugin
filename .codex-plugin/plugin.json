@@ -1,0 +1,30 @@
+{
+  "name": "demoday",
+  "version": "0.1.0",
+  "description": "Turn a codebase into a finished demo video: the agent drives the app on screen, narrates what it exercises, generates voiceover and an on-camera presenter via fal.ai, and renders the timeline with Remotion. macOS only.",
+  "author": {
+    "name": "Mark Rieck",
+    "url": "https://github.com/mrieck"
+  },
+  "homepage": "https://github.com/mrieck/demoday-claude-plugin",
+  "repository": "https://github.com/mrieck/demoday-claude-plugin",
+  "license": "MIT",
+  "keywords": ["demo", "video", "screen-recording", "voiceover", "remotion", "macos", "shorts"],
+  "skills": "./skills/",
+  "mcpServers": "./.codex-plugin/mcp.json",
+  "interface": {
+    "displayName": "DemoDay",
+    "shortDescription": "Record, narrate and edit a finished demo video of your software",
+    "longDescription": "DemoDay turns a codebase into a finished demo video. The agent rehearses the app through the demo-stage MCP server (web, macOS desktop or terminal), a deterministic runner replays the rehearsed steps while recording, narration and an on-camera presenter are generated via fal.ai and ElevenLabs, and Remotion renders the timeline. Supports 16:9 launch/tutorial/explainer videos and 9:16 Shorts.",
+    "developerName": "Mark Rieck",
+    "category": "Developer Tools",
+    "capabilities": ["Interactive", "Read", "Write", "MCP"],
+    "websiteURL": "https://github.com/mrieck/demoday-claude-plugin",
+    "defaultPrompt": [
+      "Make a 60-second demo video of this project using the demo-video skill.",
+      "Cut a vertical Short from the demo in demo/<slug> using the demo-shorts skill."
+    ],
+    "logo": "./docs/demoday_logo_256.png",
+    "brandColor": "#F59E0B"
+  }
+}

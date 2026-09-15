@@ -50,9 +50,11 @@ patterns — zero API spend.
 ## Repository layout
 
 ```
-mcp/server.mjs        stateful rehearsal session (browser + screen)
+mcp/server.mjs        stateful rehearsal session (browser + screen); --socket = daemon mode
+mcp/socket-transport.mjs   Unix-socket transport behind scripts/stage.mjs
 scripts/
-  doctor.mjs          environment preflight
+  doctor.mjs          environment preflight (--install fixes packages + Chromium)
+  stage.mjs           the demo_* tools from the shell, for agents without MCP
   selftest.mjs        full render from ffmpeg test patterns — zero API spend
   lib/                manifest, cache, pacing, fal, ffmpeg, macOS helpers
   capture/            web + macOS backends, deterministic replay
@@ -60,7 +62,38 @@ scripts/
   render/             props builder, Remotion driver
 remotion-template/    copied into your project on first render
 skills/               orchestration, capture, script and assembly craft
+SKILL.md              umbrella skill for `npx skills` installs (points at skills/)
+.claude-plugin/       Claude Code manifest + marketplace; .mcp.json beside it
+.codex-plugin/        Codex manifest + its own mcp.json; .agents/plugins/ = Codex marketplace
 ```
+
+## One repo, three front doors
+
+The same checkout is a Claude Code plugin, a Codex plugin and an agent skill.
+Nothing is duplicated; each host just reads a different manifest.
+
+| host | reads | how it reaches the rehearsal tools |
+| --- | --- | --- |
+| Claude Code | `.claude-plugin/plugin.json`, `.mcp.json`, `commands/`, `skills/` | `.mcp.json` starts `mcp/server.mjs` with `${CLAUDE_PLUGIN_ROOT}` |
+| Codex | `.codex-plugin/plugin.json` → `skills/` + `.codex-plugin/mcp.json` | Codex has no `${CLAUDE_PLUGIN_ROOT}`; its MCP config uses `"cwd": "."`, which Codex resolves to the installed plugin root, and a plugin-relative `args` path |
+| `npx skills` (Cursor, Copilot, Gemini CLI, OpenCode, …) | the root `SKILL.md` | a root `SKILL.md` makes the *whole folder* the skill, so the installer copies scripts, server and template together and offers exactly one skill. The skill says: register `mcp/server.mjs` if the agent speaks MCP, otherwise use `scripts/stage.mjs` |
+
+`scripts/stage.mjs` is the piece that makes the last row possible. Rehearsal
+is stateful — one browser or staged window across many turns — which is why it
+is an MCP server and not a pile of CLI scripts. `stage.mjs` keeps that property
+without an MCP client: its first call starts `mcp/server.mjs --socket <path>`
+as a detached daemon, and every call after that opens the Unix socket, sends
+the same newline-delimited JSON-RPC a stdio client would (`initialize`,
+`tools/call`), prints the text result and writes any screenshot to a PNG whose
+path it prints. The daemon exits by itself after 30 idle minutes, and
+`stage.mjs stop` closes the session (restoring the desktop) and ends it. Tool
+arguments are coerced against the tool's own JSON schema, so `--dwellMs 300`
+is a number and repeated `--selectors` become a ladder.
+
+The MCP server does **not** install its own dependencies on startup: hosts give
+a server a few seconds to come up (Codex's default is 10 s), and an `npm
+install` inside that window would be killed half way. `doctor.mjs --install`
+does it instead, and the skills run that first.
 
 ## Environment preflight: `doctor.mjs`
 
