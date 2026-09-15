@@ -263,10 +263,6 @@ find it — and it tells me which parts to keep building.
 
 [![Star this repo](https://img.shields.io/github/stars/mrieck/demoday-claude-plugin?style=social)](https://github.com/mrieck/demoday-claude-plugin)
 
-Got a video out of it? Open an issue with the link — I'll add it to a
-"made with DemoDay" list here. Bugs, ideas and rough edges go in
-[issues](https://github.com/mrieck/demoday-claude-plugin/issues) too.
-
 ## 📄 License notes
 
 Rendering uses Remotion, which is free for individuals and small companies but
