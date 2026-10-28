@@ -21,7 +21,7 @@ import {
  *                   2-3x into the element being talked about. A focus change
  *                   on the SAME running clip glides there over FOCUS_TWEEN_SEC.
  *   videoStartSec — a jump to another moment of the capture (or cut:
- *                   "dissolve") is a 0.2s zoom-dissolve: the old window scales
+ *                   "dissolve") is a zoom-dissolve as long as a move (morphMs): the old window scales
  *                   up and fades while the new one scales in on top.
  *
  * A layout-only beat is neither: the pane's box morphs with the presenter
@@ -114,7 +114,8 @@ export const DynamicScene = ({ scene, theme, fps, morphMs = MORPH_DEFAULT_MS }) 
   const boxW = Math.max(1, Math.round(pane.w));
   const boxH = Math.max(1, Math.round(pane.h));
 
-  const dissolveF = toFrame(DISSOLVE_SEC, fps);
+  // The jump-cut dissolve is as long as a layout move; morphMs 0 (hard cuts) makes it a cut too.
+  const dissolveF = toFrame((morphMs ?? DISSOLVE_SEC * 1000) / 1000, fps);
   const dissolvesIn = (i) => i > 0 && (beats[i].videoStartSec != null || beats[i].cut === "dissolve");
   const windows = beats.map((b, i) => {
     const from = toFrame(b.atSec, fps);

@@ -91,14 +91,14 @@ export const STYLES = {
     // `layout`; the renderer moves the frame between layouts over frame.morphMs
     // with the screen content fading beneath. Measured from the reference
     // tutorial (2026-09-13): 48 shots in 268s, ~40% face / ~40% panel / ~20%
-    // card, every move ~0.2s ease-out, content zoomed 2-3x into the element
+    // card, every move ~0.2s ease-out (we run 0.3s: 0.2 read too fast), content zoomed 2-3x into the element
     // being discussed, word-by-word captions always on.
     continuousPip: true,
     takeAspect: "16:9",        // face shots fill the frame, so the take is shot wide
     // morphMs: the move; pace "lively" = a move every 4-6s (measured), "calm"
     // = one layout per step for a plain walkthrough (plan.mjs --pace calm);
     // faceFit "auto" letterboxes a square/vertical take instead of cropping it.
-    frame: { morphMs: 200, pace: "lively", faceFit: "auto" },
+    frame: { morphMs: 300, pace: "lively", faceFit: "auto" },
     zoomToClick: false,        // beats zoom with `focus` instead
     targetLengthSec: 120,
     captionsStyle: "buildup",
@@ -126,7 +126,7 @@ export const STYLES = {
       "Ask which pace: lively (the creator look above) or calm — presenter.frame.pace \"calm\" (plan.mjs --pace calm) for a plain walkthrough: face for the intro/outro, one panel or card layout per step, moves only at step boundaries",
       "Every screen beat gets a `focus` box (w 0.3-0.5) around the field/button the narration names; whole-window shots only when the layout is the point",
       "Pick the card corner AWAY from the UI element being shown; use `layout: \"none\"` (never pip: false) to clear the frame",
-      "A videoStartSec jump inside a layout is a 0.2s zoom-dissolve; a focus change on the same clip glides",
+      "A videoStartSec jump inside a layout is a zoom-dissolve as long as a move (morphMs, 0.3s); a focus change on the same clip glides",
       "Close with ONE spoken CTA: the CTA card gets `layout: \"face-band\"` — the presenter across the top, logo + title + URL button in a band below (the crop also hides an avatar's stray hands at the bottom of the take)",
       "Captions are build-up phrases with one boxed emphasis word (auto-picked); add captionEmphasis only to override",
     ],

@@ -21,8 +21,8 @@
  * Tool names may be given with or without the demo_ prefix. Arguments are
  * --flag value pairs coerced by the tool's schema (numbers, booleans, arrays —
  * repeat --selectors for a ladder, or pass a JSON array), or one --json '{...}'.
- * Paths (--file, --cwd, --storageState) are resolved against YOUR cwd, so
- * relative paths behave as they would in any other script.
+ * Paths (--file, --cwd, --storageState, --extension, --profile) are resolved
+ * against YOUR cwd, so relative paths behave as they would in any other script.
  *
  * Output: text on stdout; every screenshot is written as a PNG under --shot-dir
  * (default: <tmp>/demoday-stage/) and its path printed as `screenshot: <path>`
@@ -44,7 +44,7 @@ const SERVER = path.join(ROOT, "mcp", "server.mjs");
 
 const USAGE = "node scripts/stage.mjs <tool|tools|status|stop> [--flag value ...] [--json '{...}'] [--socket path] [--shot-dir dir]";
 
-const PATH_ARGS = new Set(["file", "cwd", "storageState"]);
+const PATH_ARGS = new Set(["file", "cwd", "storageState", "extension", "profile"]);
 const CONTROL = new Set(["tools", "status", "stop", "help"]);
 
 const argv = process.argv.slice(2);

@@ -3,8 +3,8 @@ name: demo-capture
 description: >-
   Craft and mechanics of capturing software on screen for a demo video —
   rehearsing a flow, staging a window, the action-script format, pacing to
-  narration, and macOS permissions and coordinates. Use when recording an app,
-  driving a UI for a video, debugging a capture that looks wrong, or when clicks
+  narration, and macOS permissions and coordinates. Use when recording an app
+  or a browser extension, driving a UI for a video, debugging a capture that looks wrong, or when clicks
   land in the wrong place.
 ---
 
@@ -153,6 +153,76 @@ cursor still films); typed text and narration are scanned for secrets by
 `qa.mjs`, so never type a real key; end the script with the program exited (or
 a `dwell` on the result) so the window can close cleanly.
 
+## Browser window / extension specifics
+
+A `browser` scene records a real browser **window** — toolbar, extension icons
+and side panel included — because that is where a browser extension lives. The
+web target cannot film one: it records the page only, and an extension's toolbar
+icon and side panel sit outside every page.
+
+It is a desktop target wearing a browser. There are no selectors and no
+`demo_inspect`: the page, the side panel, the toolbar icon and the browser's own
+menus are all driven by sight — `demo_screenshot`, then `demo_click`,
+`demo_drag` and `demo_type` with coordinates read off the image. Same
+permissions as a desktop scene:
+
+```bash
+node scripts/doctor.mjs --target browser
+```
+
+### The profile is prepared once, then frozen
+
+`demo_open_browser` launches a dedicated Chrome for Testing — never the user's
+own Chrome — with the unpacked extension loaded. Pass the **built** directory,
+the one containing `manifest.json` (usually `dist/`), and build it first.
+
+There are two kinds of session, and the difference matters:
+
+- **`setup: true`** — changes to the browser are **kept**. Run it once per
+  extension: sign in, pin the extension's toolbar icon (puzzle-piece menu, then
+  the pin), drag the side panel to the width you want, `demo_close`. Do not save
+  these steps as a scene.
+- **default** — the session runs on a **throwaway copy** of that profile, and so
+  does every take. Nothing a scene does is kept.
+
+That split is what makes a replay possible. Steps are window coordinates, so a
+take only lands if it starts exactly where rehearsal started — and an extension
+that saves its state (notes, history, a dismissed onboarding card) would
+otherwise carry the rehearsal's leftovers into the take and shift everything.
+
+The profile lives at `~/.demoday/browser-profiles/<extension name>` unless you
+pass `profile`. It holds session cookies; keep it out of any repo.
+
+### Rules that keep a coordinate replay honest
+
+- **Screenshot after anything that moves the layout.** Opening the side panel
+  narrows the page and slides the toolbar icons left; coordinates read before it
+  opened are wrong after.
+- **`waitStable` before a click that follows async work**, with `minMs` past the
+  longest quiet gap. Two model results arriving two seconds apart look "stable"
+  in between.
+- **Variable content moves whatever comes after it.** A real model returns a
+  different length each run. Keep later clicks on things above or beside the
+  variable content, or rehearse and record against deterministic data.
+- **Select text with `demo_drag`**: press just before the first character,
+  release just after the last, on the text's vertical centre. Check the
+  screenshot — if a character is clipped, `demo_undo_step` and redo it.
+- Only one Chrome for Testing window may be running; the session refuses to
+  start otherwise, because it could not tell which one to record.
+
+Perform with `browser-perform.mjs`. The script carries its own `url`,
+`extension` and `profile`, so the command is just the script, the output and the
+narration length:
+
+```bash
+node scripts/capture/browser-perform.mjs \
+  --actions demo/<slug>/actions/feature-1.json \
+  --out demo/<slug>/clips/feature-1.mp4 \
+  --target-duration 14.0
+```
+
+Keep hands off the mouse and keyboard during a take, as with any desktop scene.
+
 ## Action script format
 
 ```json
@@ -171,7 +241,7 @@ a `dwell` on the result) so the window can close cleanly.
 ```
 
 Steps: `goto` `click` `hover` `type` `key` `scroll` `wait` `highlight` `dwell`
-`waitStable`.
+`waitStable` `drag`.
 
 A cli script carries `target: "cli"` and a `cwd` instead of a `url`, and is
 performed by `cli-perform.mjs`:
@@ -188,7 +258,22 @@ performed by `cli-perform.mjs`:
 
 Useful fields: `label` (used for callouts and logs), `weight` (share of stretched
 dwell — raise it on the payoff step), `dwellMs`, `cps`, `pinToWord`. Desktop steps
-use `windowPoint: [x, y]` relative to the window instead of selectors.
+use `windowPoint: [x, y]` relative to the window instead of selectors; a `drag`
+adds `toWindowPoint`.
+
+A browser script carries `target: "browser"` plus the `extension` and `profile`
+it was rehearsed with, and is performed by `browser-perform.mjs`:
+
+```json
+{ "version": 1, "id": "add-note", "target": "browser", "url": "http://localhost:5199/",
+  "extension": "/path/to/extension/dist", "profile": "/Users/me/.demoday/browser-profiles/my-extension",
+  "viewport": { "width": 1600, "height": 900 },
+  "steps": [
+    { "type": "click", "windowPoint": [1450, 63], "label": "toolbar icon" },
+    { "type": "drag", "windowPoint": [763, 483], "toWindowPoint": [993, 483], "label": "select the phrase" },
+    { "type": "click", "windowPoint": [865, 515], "label": "+ Note" },
+    { "type": "waitStable", "minMs": 5000, "maxMs": 30000, "label": "results arrive" } ] }
+```
 
 ## The event log
 

@@ -86,30 +86,43 @@ export class Stage {
     );
 
     if (app) {
-      await activate(app);
-      let before = null;
+      // The Dock and desktop are already hidden at this point. If the window
+      // step fails (typically: Accessibility not granted), put them back before
+      // throwing — a long-lived caller such as the MCP server never exits, so
+      // the exit handlers alone would leave the desktop hidden indefinitely.
       try {
-        before = await getWindowBounds(app);
+        await this._stageWindow({ app, width, height, x, y });
       } catch (e) {
-        throw new Error(
-          `Could not read the window of "${app}": ${e.message}\n` +
-          `Check the app name matches its process name, and that Accessibility is granted.`
-        );
+        await this.restore().catch(() => {});
+        throw e;
       }
-      this.saved.window = { app, bounds: before };
-      const achieved = await setWindowBounds(app, { x, y, w: width, h: height });
-      this.window = { app, bounds: achieved };
-
-      if (achieved.w !== width || achieved.h !== height) {
-        warn(
-          `"${app}" clamped its window to ${achieved.w}x${achieved.h} ` +
-          `(asked for ${width}x${height}); recording will use the actual size.`
-        );
-      }
-      info(`  stage: ${app} window at ${achieved.w}x${achieved.h} +${achieved.x}+${achieved.y}`);
     }
 
     return this.window;
+  }
+
+  async _stageWindow({ app, width, height, x, y }) {
+    await activate(app);
+    let before = null;
+    try {
+      before = await getWindowBounds(app);
+    } catch (e) {
+      throw new Error(
+        `Could not read the window of "${app}": ${e.message}\n` +
+        `Check the app name matches its process name, and that Accessibility is granted.`
+      );
+    }
+    this.saved.window = { app, bounds: before };
+    const achieved = await setWindowBounds(app, { x, y, w: width, h: height });
+    this.window = { app, bounds: achieved };
+
+    if (achieved.w !== width || achieved.h !== height) {
+      warn(
+        `"${app}" clamped its window to ${achieved.w}x${achieved.h} ` +
+        `(asked for ${width}x${height}); recording will use the actual size.`
+      );
+    }
+    info(`  stage: ${app} window at ${achieved.w}x${achieved.h} +${achieved.x}+${achieved.y}`);
   }
 
   /** Put everything back exactly as it was. Safe to call more than once. */
@@ -179,14 +192,24 @@ export class Stage {
   _restoreSyncFallback() {
     if (this.restored) return;
     try {
+      // Mirror restore(): a saved value of null means the key was absent, so
+      // delete it rather than writing "false" (which would hide the desktop).
       if ("dockAutohide" in this.saved) {
-        execFileSync("defaults", ["write", "com.apple.dock", "autohide", "-bool",
-          String(this.saved.dockAutohide === "1")]);
+        if (this.saved.dockAutohide === null) {
+          try { execFileSync("defaults", ["delete", "com.apple.dock", "autohide"]); } catch {}
+        } else {
+          execFileSync("defaults", ["write", "com.apple.dock", "autohide", "-bool",
+            String(this.saved.dockAutohide === "1")]);
+        }
         execFileSync("killall", ["Dock"]);
       }
       if ("createDesktop" in this.saved) {
-        execFileSync("defaults", ["write", "com.apple.finder", "CreateDesktop", "-bool",
-          String(this.saved.createDesktop === "1")]);
+        if (this.saved.createDesktop === null) {
+          try { execFileSync("defaults", ["delete", "com.apple.finder", "CreateDesktop"]); } catch {}
+        } else {
+          execFileSync("defaults", ["write", "com.apple.finder", "CreateDesktop", "-bool",
+            String(this.saved.createDesktop === "1")]);
+        }
         execFileSync("killall", ["Finder"]);
       }
     } catch {

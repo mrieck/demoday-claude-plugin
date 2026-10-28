@@ -83,8 +83,11 @@ export function aspectOf(format = {}) {
 /** Presenter modes: no face at all / face only outside the demo / face always on screen. */
 export const PRESENTER_MODES = ["none", "hybrid", "always"];
 
-/** Capture backends. `ios` is declared here but not implemented yet. */
-export const CAPTURE_TARGETS = ["web", "mac", "ios", "cli"];
+/**
+ * Capture backends. `ios` is declared here but not implemented yet. `browser` is
+ * a real browser window (toolbar, side panel and all) — what an extension needs.
+ */
+export const CAPTURE_TARGETS = ["web", "mac", "ios", "cli", "browser"];
 
 /**
  * Narration providers. "fal" speaks with a stock voice name; "elevenlabs" speaks
@@ -542,7 +545,7 @@ export function validate(manifest) {
       push(errors, `presenter.frame.faceFit must be one of ${FACE_FITS.join(" | ")}, got "${fr.faceFit}"`);
     }
     if (fr.morphMs != null && !(fr.morphMs >= 0 && fr.morphMs <= 1000)) {
-      push(errors, `presenter.frame.morphMs must be 0-1000 (0 = hard cuts, ~200 is the reference look)`);
+      push(errors, `presenter.frame.morphMs must be 0-1000 (0 = hard cuts, 300 is the default; the reference tutorial measured ~200)`);
     }
     if (fr.panelZoom != null && !(fr.panelZoom >= 1 && fr.panelZoom <= 1.6)) {
       push(errors, `presenter.frame.panelZoom must be 1-1.6 (1 = the cover-fit alone; more amplifies the presenter's movement)`);
@@ -981,7 +984,9 @@ export function pending(projectDir, manifest) {
     // demo) declares no actions file at all — that is complete, not pending.
     const missingActions = scene.actions ? !has(scene.actions) : !has(scene.video);
     if (scene.kind === "demo" && missingActions) needs.push("actions");
-    if (scene.kind !== "card" && !has(scene.video)) needs.push("video");
+    // Under a continuous take a presenter scene is the take itself, full
+    // frame (the dynamic style's `face` layout) — it has no clip of its own.
+    if (scene.kind !== "card" && !(continuous && scene.kind === "presenter") && !has(scene.video)) needs.push("video");
     const wantsPresenterClip =
       scene.bottom?.kind === "presenter" ||
       (scene.beats || []).some((b) => b.shot === "face" || (b.shot === "split" && scene.bottom?.kind === "presenter")) ||

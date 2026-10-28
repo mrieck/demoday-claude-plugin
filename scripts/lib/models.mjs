@@ -92,6 +92,29 @@ export const AVATAR = {
     notes: "Most expressive body/emotion coupling; pricier.",
     approxUsdPerSecond: 0.12,
   },
+  "seedance-2.5": {
+    // A full video model driven by REFERENCE audio: the still and the narration
+    // go in as lists and the prompt names them (@Image1 speaks @Audio1). Schema
+    // read from fal 2026-09-16: prompt (required), image_urls[], audio_urls[]
+    // (each 1.8–30.2s), resolution 480p|720p|1080p, duration "auto"|4-30,
+    // aspect_ratio auto|16:9|9:16|1:1|…, generate_audio. Output { video, seed }.
+    // Far more body/camera life than an avatar model, ~8x the price, and a
+    // 30s ceiling per clip — so it only works with the per-scene chunked take.
+    endpoint: "bytedance/seedance-2.5/reference-to-video",
+    verified: false,
+    form: "reference",
+    inputs: { images: "image_urls", audios: "audio_urls" },
+    minAudioSec: 1.8,
+    maxAudioSec: 30.2,
+    defaults: { resolution: "720p", generate_audio: true },
+    notes:
+      "Seedance 2.5 reference-to-video. TESTED 2026-09-16 on a 7.4s narration chunk (Mark's avatar, accepted, 8.0s clip, " +
+      "lively hands/head, same background): it RE-PERFORMS the speech rather than syncing to it — whisper on the clip's own " +
+      "track gave the same words at its own pace, drifting up to ~1.4s late by the last word (and 'Claude' became 'Claudia'). " +
+      "So the mouth does NOT line up with the narration track DemoDay cuts against; usable only if the clip's own audio " +
+      "replaced the scene narration (voice becomes Seedance's clone) or with a lipsync pass. 720p ≈ $0.47/s (480p ≈ $0.22, 1080p ≈ $1.16).",
+    approxUsdPerSecond: 0.47,
+  },
 };
 
 /** Video + audio -> lip-synced video. Only needed when the shot must come from a video model. */

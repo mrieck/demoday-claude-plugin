@@ -16,6 +16,7 @@
 
 export const CURSOR_INIT_SCRIPT = `
 (() => {
+  if (window !== window.top) return; // one cursor, in the top frame only — never inside iframes
   if (window.__demodayCursorInstalled) return;
   window.__demodayCursorInstalled = true;
 

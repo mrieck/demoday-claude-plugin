@@ -2,10 +2,10 @@
 name: demoday
 description: >-
   Make a finished demo video of a piece of software: drive the app on screen
-  (web, macOS desktop or terminal) while narrating what it does, generate an AI
-  voiceover and optional on-camera presenter, and render a polished MP4 with
-  Remotion — or cut a vertical 9:16 Short (YouTube Shorts, Reels, TikTok) from
-  one. Use when the user asks to "make a demo video", "record a demo", "create a
+  (web, macOS desktop, browser extension or terminal) while narrating what it
+  does, generate an AI voiceover and optional on-camera presenter, and render a
+  polished MP4 with Remotion — or cut a vertical 9:16 Short (YouTube Shorts,
+  Reels, TikTok) from one. Use when the user asks to "make a demo video", "record a demo", "create a
   product video", "make a walkthrough", "show off this app", or asks for a
   "short", "reel", "TikTok" or "vertical video" of their software. macOS only.
 license: MIT
@@ -55,8 +55,8 @@ the user exactly what to do when either is missing; never fake a capture.
 Capture is two passes: **rehearse** (you drive the app, screenshot after every
 action, nothing recorded) and **perform** (a runner replays the rehearsed steps
 smoothly while recording). The rehearsal tools are `demo_open`, `demo_open_app`,
-`demo_open_cli`, `demo_inspect`, `demo_click`, `demo_type`, `demo_key`,
-`demo_scroll`, `demo_highlight`, `demo_wait_stable`, `demo_screenshot`,
+`demo_open_cli`, `demo_open_browser`, `demo_inspect`, `demo_click`, `demo_drag`,
+`demo_type`, `demo_key`, `demo_scroll`, `demo_highlight`, `demo_wait_stable`, `demo_screenshot`,
 `demo_undo_step`, `demo_review_script`, `demo_save_actions`,
 `demo_load_actions`, `demo_close`.
 

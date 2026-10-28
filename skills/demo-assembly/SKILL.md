@@ -142,8 +142,10 @@ circle/square, `position` any corner, `sizePct`) and renders in
 `pip` object or opts out with `pip: false`. A "corner pip clip is Ns for an Ms
 scene — the speaker will freeze" warning from build-props is an editing note:
 the avatar engine quantises clips to 5s/10s, so split the step or shorten the
-narration. Older projects only pick the bubble up after
-`render.mjs --sync-template` (which overwrites local Remotion edits).
+narration. Older projects only pick the bubble up once their `remotion/src`
+matches the template: render.mjs syncs it automatically when the project lacks
+files the template has (a stale scaffold), and `--sync-template` forces it —
+both overwrite local Remotion edits.
 
 ## Moving presenter frame (the dynamic style)
 
@@ -157,7 +159,7 @@ object-position) is recomputed every frame from the track — `face` full-bleed,
 `card` scene drawn as a bottom band (`Card.jsx` `band` prop: logo + title row,
 CTA button), `none` faded out in place. The element is
 never re-mounted, so lips stay on the narration through every move. A change
-is a **move**: over the first `presenter.frame.morphMs` (200) of an entry the
+is a **move**: over the first `presenter.frame.morphMs` (300) of an entry the
 rect eases out (`easeOutCubic`) from the previous rect; `morphMs: 0` is a hard
 cut. A take whose aspect differs from the frame's (a square or 9:16 portrait,
 sizes probed into `pipTake.segments[].width/height` by build-props) gets a
@@ -180,7 +182,7 @@ else the full frame), hidden under a face, and its box/opacity morph over the
 same `morphMs` as the frame. Inside it each beat is a `<Sequence>`: `FocusClip`
 cover-fits the capture and zooms into `beat.focus` (a focus change on the same
 running clip glides over 0.4s); a beat with `videoStartSec` or `cut:
-"dissolve"` enters with a 0.2s zoom-dissolve (outgoing window extended and
+"dissolve"` enters with a zoom-dissolve as long as a move, `morphMs` (outgoing window extended and
 scaled up/faded, incoming scaled in on top); `framing: pan|cover` on a beat
 uses `DemoClip` instead; `shot: "insert"` reuses `InsertBeat`. Layer order in
 `DemoVideo.jsx` is scenes → presenter frame → captions → watermark, so a
@@ -188,8 +190,12 @@ full-frame face never swallows the caption (the old bubble rendered above
 captions; it now sits below them too).
 
 Things build-props refuses or warns about here: no take at all under the
-dynamic style (error); a take shorter than the runtime; a chunk seam (the
-avatar re-poses) that does not coincide with a layout change.
+dynamic style (error); a take shorter than the runtime; a tail-less chunk seam
+(an older take, or `--take-overlap 0`) that does not coincide with a layout
+change. A chunked take's segments carry `overlapSec` — the silent tail on each
+chunk but the last — and `DemoVideo.jsx` extends that chunk's `<Sequence>` by
+it and fades the next chunk in on top (`TakeSeam`), so the avatar's re-pose at
+the seam is a cross-dissolve.
 
 ## Diagnosing a bad render
 

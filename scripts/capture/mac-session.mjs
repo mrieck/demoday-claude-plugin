@@ -176,6 +176,18 @@ export class MacSession {
         break;
       }
 
+      case "drag": {
+        const from = step.windowPoint ? toScreen(step.windowPoint, true) : toScreen(step.point, false);
+        const to = step.toWindowPoint ? toScreen(step.toWindowPoint, true) : toScreen(step.toPoint, false);
+        await input.drag(from, to);
+        this.logEvent("drag", {
+          x: from.x - r.x, y: from.y - r.y,
+          toX: to.x - r.x, toY: to.y - r.y,
+          label: step.label || "drag",
+        });
+        break;
+      }
+
       case "type":
         await input.type(step.text, { cps: step.cps });
         this.logEvent("type", { text: step.text, label: step.label || "type" });

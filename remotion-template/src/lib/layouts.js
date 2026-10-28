@@ -10,7 +10,7 @@
  * Measured from the reference tutorial (1280x720): the side panel is 40% of
  * the width and full height with the face ~1.3-1.4x bigger than in the
  * full-frame shot; the corner card is ~24% x 47% tucked into a corner; every
- * change between them is a ~0.2s ease-out move of the frame, with the screen
+ * change between them is a ~0.2s ease-out move of the frame (we run 0.3s), with the screen
  * content fading in/out underneath over the same window.
  */
 
@@ -44,8 +44,8 @@ export const CONTENT_BOX = {
   "face-band": { x: 0, y: 1 - FACE_BAND, w: 1, h: FACE_BAND },
 };
 
-export const MORPH_DEFAULT_MS = 200;   // presenter move + content fade, measured 5-6 frames at 30fps
-export const DISSOLVE_SEC = 0.2;       // content swap inside a layout (videoStartSec jump)
+export const MORPH_DEFAULT_MS = 300;   // presenter move + content fade (the reference measured ~0.2s; 0.3s reads easier — Mark, 2026-09-16)
+export const DISSOLVE_SEC = MORPH_DEFAULT_MS / 1000; // content swap inside a layout (videoStartSec jump) — same length as a move
 export const FOCUS_TWEEN_SEC = 0.4;    // a focus change on the same running clip glides, not cuts
 
 /** Fast ease-out: a big first step, then settling — the look of the reference moves. */

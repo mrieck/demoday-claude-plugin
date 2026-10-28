@@ -1,5 +1,5 @@
 import React from "react";
-import { AbsoluteFill, Audio, Freeze, Sequence, staticFile, useVideoConfig } from "remotion";
+import { AbsoluteFill, Audio, Freeze, Sequence, staticFile, useCurrentFrame, useVideoConfig } from "remotion";
 import { TransitionSeries, linearTiming } from "@remotion/transitions";
 import { fade } from "@remotion/transitions/fade";
 import { wipe } from "@remotion/transitions/wipe";
@@ -41,6 +41,13 @@ export function totalFrames(props, fps) {
   );
   return Math.max(1, sum - overlap);
 }
+
+/** Fade a take chunk in over its predecessor's silent tail (inF frames); the predecessor simply ends underneath. */
+const TakeSeam = ({ inF, children }) => {
+  const frame = useCurrentFrame();
+  const opacity = inF > 0 && frame < inF ? frame / inF : 1;
+  return <AbsoluteFill style={{ opacity }}>{children}</AbsoluteFill>;
+};
 
 const SceneBody = ({ scene, theme, fps, presenterMode, pipVideo, pipDefaults, pipTake, split, morphMs }) => {
   switch (scene.kind) {
@@ -182,9 +189,16 @@ export const DemoVideo = (props) => {
             // Not secToFrames: that clamps to >= 1 and would leave frame 0 —
             // the poster frame of every embed — without the presenter.
             const from = Math.max(0, Math.round(seg.fromSec * fps));
-            const frames = Math.min(secToFrames(seg.durationSec, fps), Math.max(0, total - from));
+            // A chunked take (one clip per scene, gen/presenter.mjs) carries a
+            // silent tail of overlapSec on every chunk but the last; the next
+            // chunk starts at the seam and fades in over that tail, above the
+            // outgoing one, so the avatar's re-pose is a cross-dissolve.
+            const tailF = i < pipTake.length - 1 ? Math.round((seg.overlapSec || 0) * fps) : 0;
+            const inF = i > 0 ? Math.round((pipTake[i - 1].overlapSec || 0) * fps) : 0;
+            const frames = Math.min(secToFrames(seg.durationSec, fps) + tailF, Math.max(0, total - from));
             return (
               <Sequence key={`pip-${i}`} from={from} durationInFrames={frames}>
+                <TakeSeam inF={inF}>
                 {layoutTrack ? (
                   <PresenterFrame
                     video={seg.video} track={layoutTrack} segmentFromSec={seg.fromSec} theme={theme} morphMs={morphMs}
@@ -195,6 +209,7 @@ export const DemoVideo = (props) => {
                 ) : (
                   <PresenterPip video={seg.video} theme={theme} pip={props.presenter?.pip || {}} animateIn={i === 0} />
                 )}
+                </TakeSeam>
               </Sequence>
             );
           })

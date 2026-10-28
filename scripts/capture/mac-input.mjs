@@ -87,6 +87,34 @@ export async function click(x, y, { glide = true, double = false } = {}) {
 }
 
 /**
+ * Press at one point, travel to another, release — how text gets selected when
+ * there are only pixels to go by. The travel is a straight line (a bowed path
+ * would wander onto the neighbouring lines of text), and the button is released
+ * in a finally so a crash mid-drag cannot leave it held down.
+ */
+export async function drag(from, to, { durationMs, fps = 60 } = {}) {
+  await glideTo(from.x, from.y);
+  const dist = Math.hypot(to.x - from.x, to.y - from.y);
+  const ms = durationMs ?? Math.max(450, motion.travelDuration(dist));
+  const points = motion.path(from, to, { durationMs: ms, fps, arc: 0 });
+
+  await cliclick(`dd:${from.x},${from.y}`, "w:60");
+  try {
+    const CHUNK = 12;
+    const began = Date.now();
+    for (let i = 0; i < points.length; i += CHUNK) {
+      const chunk = points.slice(i, i + CHUNK);
+      await cliclick(...chunk.map((p) => `dm:${p.x},${p.y}`));
+      const behind = (chunk.at(-1).atMs) - (Date.now() - began);
+      if (behind > 0) await motion.sleep(behind);
+    }
+  } finally {
+    await cliclick(`du:${to.x},${to.y}`, "w:30");
+  }
+  return { x: to.x, y: to.y };
+}
+
+/**
  * Convert a point read off a (possibly downscaled) screenshot into screen points,
  * then click it. This is the ONLY sanctioned way to click from an image.
  *

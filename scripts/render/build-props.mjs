@@ -99,6 +99,9 @@ export async function buildProps(projectDir, { lenient = false, name = manifest.
           }
         }
       }
+    } else if (scene.kind === "presenter" && m.presenter?.mode === "always" && m.presenter?.continuousPip) {
+      // Under a continuous take the presenter scene IS the take, full frame
+      // (dynamic `face`); it needs no clip of its own — the take layer covers it.
     } else if (scene.kind !== "card") {
       problems.push(`scene "${scene.id}": kind "${scene.kind}" has no video`);
     }
@@ -325,8 +328,11 @@ export async function buildProps(projectDir, { lenient = false, name = manifest.
         if (covered + 0.25 < runtime) {
           warn(`the presenter take covers ${fmtDuration(covered)} of a ${fmtDuration(runtime)} video — the frame will be empty past its end; re-run gen/presenter.mjs --all`);
         }
-        // A chunk seam re-poses the avatar; it hides inside a layout move.
-        for (const seg of segs.slice(1)) {
+        // A chunk seam re-poses the avatar. A chunked take (presenter.mjs)
+        // cross-dissolves it over the previous chunk's silent tail; a tail-less
+        // seam (an older take, or --take-overlap 0) only hides inside a layout move.
+        for (const [i, seg] of segs.slice(1).entries()) {
+          if ((segs[i].overlapSec || 0) > 0) continue;
           const onMove = track.some((e) => Math.abs(e.fromSec - seg.fromSec) < 0.06);
           if (!onMove) {
             warn(`presenter take segment starts at ${seg.fromSec.toFixed(2)}s with no layout change there — the avatar will visibly re-pose; start a beat with a different layout at that second`);
@@ -334,6 +340,36 @@ export async function buildProps(projectDir, { lenient = false, name = manifest.
         }
       }
     }
+  }
+
+  /**
+   * Is the presenter visible on the very first frame? Decides whether the
+   * hook band needs its own portrait (see the overlay branch below).
+   */
+  function presenterOnFrame0(m, timeline, presenter) {
+    const first = timeline[0];
+    if (!first) return false;
+    const mode = m.presenter?.mode;
+    if (mode === "always") {
+      const segs = presenter?.pipTake?.segments || [];
+      if (segs.length) {
+        if ((segs[0].fromSec || 0) > 0.05) return false;
+        const track = presenter?.layoutTrack;
+        if (track?.length) return track[0].fromSec <= 0.05 && track[0].layout !== "none";
+        return first.pip !== false;
+      }
+      // per-scene corner bubble
+      if (first.kind === "demo" && first.presenterVideo && first.pip !== false) return true;
+    }
+    if (first.kind === "presenter") return !!first.video || mode !== "none";
+    if (first.kind === "demo" && first.beats?.length) {
+      const b0 = first.beats[0];
+      if (b0.shot === "face") return true;
+      if (b0.shot === "split" || first.beatLayout === "anchored") {
+        return !!first.presenterVideo && first.bottom?.kind === "presenter";
+      }
+    }
+    return false;
   }
 
   // The frame-0 hook card. Defaults are resolved here, not in the component, so
@@ -372,6 +408,13 @@ export async function buildProps(projectDir, { lenient = false, name = manifest.
     if (!m.cover.hook) problems.push("cover.hook is empty — write the hook line for the frame-0 band (or remove cover)");
     if (m.cover.portrait && !existsSync(manifest.resolveIn(projectDir, m.cover.portrait))) {
       problems.push(`cover portrait not found at ${m.cover.portrait}`);
+    }
+    // The band's little circle portrait exists so a poster frame has the
+    // presenter on it; when frame 0 already shows them (a face opening beat,
+    // an anchored split, a corner bubble) it just repeats the face — drop it.
+    if (m.cover.portrait && presenterOnFrame0(m, timeline, presenter)) {
+      info(`  cover: the presenter is already on frame 0 — leaving the band's portrait out`);
+      m.cover = { ...m.cover, portrait: null };
     }
     // The default band position is the vertical one (over the demo pane of a
     // Short); on landscape the component places the band in the lower third,

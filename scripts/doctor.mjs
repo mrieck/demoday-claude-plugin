@@ -30,7 +30,7 @@ const PLUGIN_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "
 loadDotenv();
 
 const args = parseArgs(process.argv.slice(2));
-const target = args.target || "all"; // all | web | mac | cli
+const target = args.target || "all"; // all | web | mac | cli | browser
 const install = Boolean(args.install);
 
 /** Run an installer, streaming its output to stderr so stdout stays one JSON line. */
@@ -53,6 +53,9 @@ function needed(scope) {
   // A cli demo records a real Terminal window through the mac backend, so it
   // needs everything a mac demo needs plus its own checks.
   if (target === "cli") return scope === "cli" || scope === "mac";
+  // A browser demo records a real browser window through the mac backend, and
+  // that browser is the one Playwright downloads for web capture.
+  if (target === "browser") return scope === "web" || scope === "mac";
   return scope === target;
 }
 

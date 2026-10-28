@@ -75,20 +75,23 @@ Anything that exists only in your context is lost on the next run.
   // presenter.continuousPip: true (seeded by --style tutorial) makes
   // gen/presenter.mjs --all produce ONE continuous bubble take instead of
   // per-scene clips; it writes presenter.pipTake — segments laid on the
-  // absolute timeline ([{ video, fromSec, durationSec }]) that the renderer
-  // plays straight through underneath the cuts.
+  // absolute timeline ([{ video, audio, fromSec, durationSec, overlapSec,
+  // scenes }], one chunk per scene, named after its first scene) that the
+  // renderer plays straight through underneath the cuts, cross-dissolving
+  // each seam over the previous chunk's overlapSec silent tail. Re-voicing a
+  // scene regenerates only its chunk.
   // "zoomToClick": false at the top level turns the click push-in off for every
   // demo scene (tutorial default); a scene's own zoomToClick wins.
   // Dynamic style (--style dynamic): the same continuous take, RE-FRAMED along
   // the beats' `layout` (see beats below). presenter.takeAspect "16:9" shoots
   // the take wide (assets/presenter-16x9.png) so face beats fill the frame;
-  // presenter.frame.morphMs (default 200) is how long a move between layouts
+  // presenter.frame.morphMs (default 300) is how long a move between layouts
   // takes — 0 for hard cuts; pace "lively" (a move every 4-6s) | "calm" (one
   // layout per step); faceFit "auto" letterboxes a square/9:16 take for
   // full-frame layouts | "cover" crops | "contain"; panelZoom 1-1.6 (default 1,
   // the side panel is a plain cover-fit). No pip block; transitions must be empty.
   // "presenter": { "mode": "always", "continuousPip": true, "takeAspect": "16:9",
-  //                "frame": { "morphMs": 200, "pace": "lively", "faceFit": "auto" }, ... },
+  //                "frame": { "morphMs": 300, "pace": "lively", "faceFit": "auto" }, ... },
   "music": { "enabled": false, "bed": "assets/bed.mp3", "duckDb": -14 },
   // Optional sound-effect pack (needs ELEVENLABS_API_KEY): named cues fired on
   // events — insert, stamp, face, bullet, coverExit, transition, card,
@@ -169,7 +172,9 @@ rejected there — see the demo-video skill's dynamic recipe):
 ### Scene kinds
 
 ```jsonc
-// A screen-capture segment. target: "web" | "mac" | "cli".
+// A screen-capture segment. target: "web" | "mac" | "cli" | "browser".
+// A browser scene records a real browser window, toolbar and side panel
+// included — use it for a browser extension.
 // A cli scene records a real Terminal window running the real program; add
 // "cwd" (the project the demo shell starts in) and expect a *.raw.mp4 kept
 // beside the clip (the unretimed take).

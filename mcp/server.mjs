@@ -22,8 +22,10 @@ import { writeFile, mkdir, readFile } from "node:fs/promises";
 import { WebSession } from "../scripts/capture/web-session.mjs";
 import { MacSession } from "../scripts/capture/mac-session.mjs";
 import { CliSession } from "../scripts/capture/cli-session.mjs";
+import { BrowserSession } from "../scripts/capture/browser-session.mjs";
 import { imageToScreen } from "../scripts/capture/mac-input.mjs";
 import { blankScript } from "../scripts/lib/actions.mjs";
+import { sleep } from "../scripts/lib/cursor.mjs";
 import { parseArgs } from "../scripts/lib/args.mjs";
 import { UnixSocketServerTransport } from "./socket-transport.mjs";
 
@@ -32,7 +34,7 @@ const SCREENSHOT_MAX_WIDTH = 1400;
 
 const state = {
   session: null,
-  target: null,       // "web" | "mac" | "cli"
+  target: null,       // "web" | "mac" | "cli" | "browser"
   script: null,       // the action script being assembled
   shotDir: path.join(os.tmpdir(), `demoday-rehearsal-${process.pid}`),
   // Metadata of the most recent screenshot. Desktop clicks are given in IMAGE
@@ -43,7 +45,7 @@ const state = {
 const text = (s) => ({ content: [{ type: "text", text: s }] });
 const fail = (s) => ({ content: [{ type: "text", text: s }], isError: true });
 
-/** Desktop-backed sessions (mac and cli) share screenshots, coordinates and input. */
+/** Desktop-backed sessions (mac, cli and browser) share screenshots, coordinates and input. */
 const isDesktop = () => state.session instanceof MacSession;
 
 function requireSession() {
@@ -250,6 +252,73 @@ server.registerTool(
 );
 
 server.registerTool(
+  "demo_open_browser",
+  {
+    title: "Open a browser-window demo session",
+    description:
+      "Open a real browser WINDOW for a demo that needs the browser's own chrome in " +
+      "frame — above all a browser extension, whose toolbar icon and side panel sit " +
+      "outside the page. Launches a dedicated Chrome for Testing (never the user's own " +
+      "Chrome) with the unpacked extension loaded and a persistent profile, sizes the " +
+      "window, hides the Dock and desktop icons. Nothing is recorded. Everything is " +
+      "driven by sight like a desktop app: demo_screenshot, then demo_click / " +
+      "demo_drag with coordinates read off the image — demo_inspect and selectors do " +
+      "not apply. TWO KINDS OF SESSION: open once with setup:true to prepare the " +
+      "profile (sign in, pin the extension's toolbar icon, set the side panel width) — " +
+      "those changes are kept and nothing is recorded into a script worth saving. " +
+      "Every other session, and every take, runs on a throwaway copy of that profile, " +
+      "so each one starts from the same prepared state and nothing a scene does " +
+      "(notes, history, settings) leaks into the next. Requires Accessibility and Screen " +
+      "Recording permissions — run `node scripts/doctor.mjs --target browser` first if unsure.",
+    inputSchema: {
+      url: z.string().describe("Page to open first (http(s) or file://)"),
+      id: z.string().describe("Scene id this rehearsal is for"),
+      extension: z.string().optional().describe("Unpacked extension directory to load — the BUILT one containing manifest.json, often dist/"),
+      profile: z.string().optional().describe("Browser profile directory. Default: ~/.demoday/browser-profiles/<extension name>"),
+      setup: z.boolean().optional().describe("true = a setup session whose changes to the profile are KEPT. Default false: work on a throwaway copy, as the take will"),
+      width: z.number().optional().describe("Window width in points, default 1600"),
+      height: z.number().optional().describe("Window height in points, default 900"),
+    },
+  },
+  async ({ url, id, extension, profile, setup, width, height }) => {
+    if (state.session) await state.session.close().catch(() => {});
+    state.session = new BrowserSession({
+      url,
+      extension: extension || null,
+      profile: profile || null,
+      keep: Boolean(setup),
+      width: width || 1600,
+      height: height || 900,
+    });
+    try {
+      await state.session.start();
+    } catch (e) {
+      state.session = null;
+      return fail(`Could not open the browser stage: ${e.message}`);
+    }
+    state.target = "browser";
+    state.script = blankScript({ id, target: "browser", url });
+    state.script.app = state.session.app;
+    if (state.session.extensions.length) state.script.extension = state.session.extensions[0];
+    state.script.profile = state.session.profile;
+    state.script.viewport = {
+      width: state.session.window?.bounds?.w || width || 1600,
+      height: state.session.window?.bounds?.h || height || 900,
+    };
+    return shot(
+      `Opened ${url} in ${state.session.app} for scene "${id}"` +
+      `${extension ? ` with the extension at ${state.session.extensions[0]}` : ""}. ` +
+      `Profile: ${state.session.profile}. ` +
+      (setup
+        ? "SETUP session: what you change in the browser is kept for every later rehearsal and take. " +
+          "demo_close when the profile is ready; do not save these steps as a scene. "
+        : "Working on a throwaway copy of the profile — the take will start from this same state. ") +
+      "The desktop will be restored on demo_close."
+    );
+  }
+);
+
+server.registerTool(
   "demo_wait_stable",
   {
     title: "Wait for the screen to settle",
@@ -445,6 +514,9 @@ server.registerTool(
         return fail(`Click failed — the step was NOT recorded.\n${e.message}`);
       }
       recordStep(step);
+      // A browser's own menus and its side panel animate open; without a beat the
+      // screenshot shows the window as it was before the click took effect.
+      if (state.target === "browser") await sleep(450);
       return shot(`Clicked ${label} at image (${x},${y}) -> screen (${screen.x},${screen.y}).`);
     }
 
@@ -466,6 +538,52 @@ server.registerTool(
     }
     recordStep(step);
     return shot(`Clicked ${label}.`);
+  }
+);
+
+server.registerTool(
+  "demo_drag",
+  {
+    title: "Press, drag and release",
+    description:
+      "Desktop, cli and browser sessions only. Press at one point, drag to another " +
+      "and release — how text is selected by sight (press just before the first " +
+      "character, release just after the last), and how sliders and dividers are " +
+      "moved. Coordinates are read off the most recent screenshot image. Records the step.",
+    inputSchema: {
+      x: z.number().describe("Start X read off the last screenshot image"),
+      y: z.number().describe("Start Y read off the last screenshot image"),
+      toX: z.number().describe("End X read off the last screenshot image"),
+      toY: z.number().describe("End Y read off the last screenshot image"),
+      label: z.string().describe("Human description, used for callouts and logs"),
+      dwellMs: z.number().optional().describe("Pause after, for the viewer to read the result"),
+    },
+  },
+  async ({ x, y, toX, toY, label, dwellMs }) => {
+    const session = requireSession();
+    if (!isDesktop()) {
+      return fail("demo_drag works on real windows only (desktop, cli and browser sessions).");
+    }
+    if (!state.lastShot) return fail("Take a demo_screenshot first so coordinates can be mapped.");
+
+    const toWindow = (ix, iy) => {
+      const screen = imageToScreen(state.lastShot, ix, iy);
+      return [screen.x - state.lastShot.origin.x, screen.y - state.lastShot.origin.y];
+    };
+    const step = {
+      type: "drag",
+      windowPoint: toWindow(x, y),
+      toWindowPoint: toWindow(toX, toY),
+      label,
+      ...(dwellMs != null ? { dwellMs } : {}),
+    };
+    try {
+      await session.perform({ ...step, dwellMs: 0 });
+    } catch (e) {
+      return fail(`Drag failed — the step was NOT recorded.\n${e.message}`);
+    }
+    recordStep(step);
+    return shot(`Dragged ${label} from image (${x},${y}) to (${toX},${toY}).`);
   }
 );
 
@@ -610,7 +728,8 @@ server.registerTool(
     await writeFile(abs, `${JSON.stringify(state.script, null, 2)}\n`);
     const runner =
       state.target === "mac" ? "mac-perform" :
-      state.target === "cli" ? "cli-perform" : "web-perform";
+      state.target === "cli" ? "cli-perform" :
+      state.target === "browser" ? "browser-perform" : "web-perform";
     const extraFlag =
       state.target === "mac" ? ` --app ${JSON.stringify(state.script.app)}` :
       state.target === "cli" && state.script.cwd ? ` --cwd ${JSON.stringify(state.script.cwd)}` : "";
@@ -620,7 +739,10 @@ server.registerTool(
       `${extraFlag} --out demo/clips/${state.script.id}.mp4 --target-duration <narration seconds>` +
       (state.target === "cli"
         ? "\n\nThe cli runner records at natural speed and retimes the take to the target duration afterwards."
-        : "")
+        : state.target === "browser"
+          ? "\n\nThe script carries its own url, extension and profile. Steps are window coordinates, so " +
+            "the take needs the window to look as it did in rehearsal: same size, profile and starting content."
+          : "")
     );
   }
 );

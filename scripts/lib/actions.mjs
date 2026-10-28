@@ -23,7 +23,7 @@
 
 export const STEP_TYPES = [
   "goto", "click", "hover", "type", "key", "scroll", "wait", "highlight", "dwell",
-  "waitStable",
+  "waitStable", "drag", "upload",
 ];
 
 /** Default milliseconds each step type takes to perform, before dwell. */
@@ -37,7 +37,9 @@ const INTRINSIC_MS = {
   wait: 0,        // explicit
   highlight: 0,   // explicit
   dwell: 0,       // pure pause
+  upload: 600,    // setInputFiles on a file input (no native chooser is shown)
   waitStable: 0,  // estimated from minMs in normalize(); real cost is decided by the app
+  drag: 1300,     // travel to the start, then the drag itself (desktop targets only)
 };
 
 /** Characters per second for "human" typing. Slow enough to read along with. */
@@ -190,6 +192,9 @@ export function validate(script) {
     if (s.type === "key" && !s.key) errors.push(`${at}: key needs a key name`);
     if (["click", "hover", "highlight"].includes(s.type) && !s.selectors?.length && !s.point && !s.windowPoint) {
       errors.push(`${at}: ${s.type} needs a selector or a point`);
+    }
+    if (s.type === "drag" && !((s.windowPoint && s.toWindowPoint) || (s.point && s.toPoint))) {
+      errors.push(`${at}: drag needs windowPoint + toWindowPoint (or point + toPoint)`);
     }
     if (s.type === "waitStable" && s.minMs != null && s.maxMs != null &&
         Number(s.maxMs) < Number(s.minMs)) {

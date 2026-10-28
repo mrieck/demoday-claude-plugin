@@ -43,9 +43,16 @@ function sha256File(file) {
   });
 }
 
+/** A chunk shorter than this rides with its neighbour (engines dislike tiny clips; a 3s card is not worth its own seam). */
+const TAKE_CHUNK_MIN_SEC = 4;
+/** Silent tail on every chunk but the last; the renderer fades the next chunk in over it. */
+const TAKE_OVERLAP_SEC = 0.3;
+const overlapSecFor = (args) => Math.max(0, Number(args["take-overlap"] ?? TAKE_OVERLAP_SEC));
+
 const USAGE =
   "presenter.mjs --project <dir> [--manifest <file>] (--character | --all | --scene <id> | --take [false]) " +
-  "[--engine infinitalk|kling-avatar|omnihuman] [--take-max-sec 120] [--force]";
+  "[--engine infinitalk|kling-avatar|omnihuman] [--take-chunk scene|<sec>|none] [--take-overlap 0.3] " +
+  "[--take-max-sec 120] [--rechunk] [--dry-run] [--only <sceneId>] [--force]";
 
 /**
  * Generate the presenter's face once.
@@ -98,12 +105,40 @@ export async function makeCharacter({ projectDir, description, model = "nano-ban
   return result;
 }
 
+/** The cache spec animate() files a clip under — shared with the lookup below. */
+function animationSpec({ imageFile, audioFile, engine, prompt, aspect, spec }) {
+  return {
+    kind: "presenter",
+    model: spec.endpoint,
+    params: { engine, prompt, ...(spec.form === "reference" ? { aspect: aspect || "auto", ...spec.defaults } : {}) },
+    files: [imageFile, audioFile],   // hashed, so a re-recorded line regenerates the shot
+  };
+}
+
+/** The clip a previous run animated from exactly these inputs, or null. Never generates. */
+export async function cachedAnimation({ projectDir, imageFile, audioFile, engine = "infinitalk", prompt = null, aspect = null }) {
+  const spec = AVATAR[engine] || resolve(AVATAR, engine);
+  if (!spec?.endpoint || !existsSync(imageFile) || !existsSync(audioFile)) return null;
+  const hit = await cache.lookup(projectDir, await cache.key(animationSpec({ imageFile, audioFile, engine, prompt, aspect, spec })));
+  return hit ? manifest.resolveIn(projectDir, hit.output) : null;
+}
+
 /** Animate the character to a narration track. */
 export async function animate({
-  projectDir, imageFile, audioFile, outFile, engine = "infinitalk", prompt = null, force = false,
+  projectDir, imageFile, audioFile, outFile, engine = "infinitalk", prompt = null, force = false, aspect = null,
 }) {
   const spec = AVATAR[engine] || resolve(AVATAR, engine);
   if (!spec?.endpoint) throw new Error(`Unknown presenter engine: ${engine}`);
+  // A reference-driven video model (seedance-2.5) bounds the audio it accepts.
+  if (spec.maxAudioSec || spec.minAudioSec) {
+    const sec = (await probe(audioFile).catch(() => null))?.duration;
+    if (sec && spec.maxAudioSec && sec > spec.maxAudioSec) {
+      throw new Error(`${engine} takes at most ${spec.maxAudioSec}s of audio per clip; this chunk is ${sec.toFixed(1)}s — the take is chunked per scene, so split that scene`);
+    }
+    if (sec && spec.minAudioSec && sec < spec.minAudioSec) {
+      throw new Error(`${engine} needs at least ${spec.minAudioSec}s of audio per clip; this chunk is ${sec.toFixed(1)}s`);
+    }
+  }
 
   if (!existsSync(imageFile)) throw new Error(`Character image not found: ${imageFile}`);
   if (!existsSync(audioFile)) {
@@ -115,16 +150,25 @@ export async function animate({
 
   return cache.memo(
     projectDir,
-    {
-      kind: "presenter",
-      model: spec.endpoint,
-      params: { engine, prompt },
-      files: [imageFile, audioFile],   // hashed, so a re-recorded line regenerates the shot
-    },
+    animationSpec({ imageFile, audioFile, engine, prompt, aspect, spec }),
     async () => {
       const [image_url, audio_url] = await Promise.all([toUrl(imageFile), toUrl(audioFile)]);
-      const input = { image_url, audio_url };
-      if (prompt) input.prompt = prompt;
+      let input;
+      if (spec.form === "reference") {
+        // The still and the narration are references the prompt points at.
+        input = {
+          prompt: `@Image1 is the presenter. He speaks the words in @Audio1 directly to camera, lips matching the audio exactly, ` +
+            `natural expression, small head movements and light hand gestures, fixed webcam framing, the same background${prompt ? `. ${prompt}` : "."}`,
+          [spec.inputs.images]: [image_url],
+          [spec.inputs.audios]: [audio_url],
+          duration: "auto",
+          aspect_ratio: aspect || "auto",
+          ...spec.defaults,
+        };
+      } else {
+        input = { image_url, audio_url };
+        if (prompt) input.prompt = prompt;
+      }
 
       let data;
       try {
@@ -337,8 +381,20 @@ await main(async () => {
   // underneath the cuts. Scenes with `pip: false` are skipped (the take pauses
   // there; the renderer hides the bubble). Cards are covered too — a persistent
   // bubble that vanishes for the CTA card is exactly the pop the take exists to
-  // avoid. Engines cap the audio they accept, so the take is chunked at scene
-  // boundaries to --take-max-sec; one chunk seam is far better than ten.
+  // avoid.
+  //
+  // The take is CHUNKED AT SCENE BOUNDARIES (--take-chunk scene, the default):
+  // one clip per scene (a scene under TAKE_CHUNK_MIN_SEC rides with its
+  // neighbour), named after its first scene, so re-voicing one line only
+  // regenerates that scene's chunk instead of re-billing the whole runtime
+  // (2026-09-16: a one-word hook change on a 44s video cost the full take
+  // again). Every chunk but the last carries --take-overlap (0.3s) of silence
+  // at its tail; the renderer plays the next chunk over it with a fade-in, so
+  // the avatar's re-pose at the seam is a short cross-dissolve instead of a
+  // snap. --take-chunk none is the old greedy packing up to --take-max-sec.
+  // An existing take whose chunks are all still fresh is left alone whatever
+  // the chunking rule (so a project made under the old rule is not re-billed
+  // just to split it); --rechunk (or --force) re-cuts it.
   if (take) {
     if (mode !== "always") throw new Error(`--take needs presenter.mode "always" (it is "${mode}")`);
     if ((m.transitions || []).length) {
@@ -357,73 +413,156 @@ await main(async () => {
       if (s.pip !== false && d > 0) ranges.push({ scene: s, fromSec: cursor, durationSec: d });
       cursor += d;
     }
-    // Chunk at scene boundaries: contiguous scenes only, total <= maxSec.
     // kling-avatar has taken a 73s take in one clip; the ceiling is not
     // documented, so a refused long chunk falls back to 60s chunks below.
     const maxSec = Number(args["take-max-sec"] || 120);
+    const engineSpec = AVATAR[engine] || resolve(AVATAR, engine);
+    const chunkMode = String(args["take-chunk"] ?? "scene");
+    const perScene = chunkMode === "scene";
+    let packMax = perScene || chunkMode === "none" ? maxSec : Math.min(maxSec, Number(chunkMode) || maxSec);
+    if (engineSpec?.maxAudioSec) packMax = Math.min(packMax, Math.floor(engineSpec.maxAudioSec - overlapSecFor(args)));
+    const overlapSec = overlapSecFor(args);
+    const dryRun = boolArg(args["dry-run"], false);
+    // --only <sceneId>: generate just that scene's chunk as a TEST clip
+    // (clips/take-test-<engine>-<scene>.mp4) and leave the manifest alone —
+    // the way to try another engine on one scene before committing a take.
+    const only = args.only ? String(args.only) : null;
+    const rechunk = boolArg(args.rechunk, false) || force || !!only;
+    if (only && !ranges.some((r) => r.scene.id === only)) throw new Error(`--only: no scene "${only}" with a duration in the timeline`);
     const chunks = [];
     for (const r of ranges) {
       const last = chunks[chunks.length - 1];
       const contiguous = last && Math.abs(last.toSec - r.fromSec) < 0.01;
-      if (contiguous && last.durationSec + r.durationSec <= maxSec) {
+      const fits = contiguous && last.durationSec + r.durationSec <= packMax;
+      // Per scene: a new chunk at every boundary unless the chunk so far, or
+      // this scene, is too short to be a clip of its own.
+      const join = fits && (!perScene || last.durationSec < TAKE_CHUNK_MIN_SEC || r.durationSec < TAKE_CHUNK_MIN_SEC);
+      if (join) {
         last.ranges.push(r); last.durationSec += r.durationSec; last.toSec = r.fromSec + r.durationSec;
       } else {
         chunks.push({ ranges: [r], fromSec: r.fromSec, toSec: r.fromSec + r.durationSec, durationSec: r.durationSec });
       }
     }
-    if (chunks.length > 1) {
-      info(`  take: ${fmtDuration(cursor)} of narration in ${chunks.length} chunk(s) (max ${maxSec}s each) — the bubble re-poses at each chunk seam`);
-    }
+    // Silent tail on every chunk but the last: the seam's cross-dissolve.
+    for (const [ci, chunk] of chunks.entries()) chunk.tailSec = ci < chunks.length - 1 ? overlapSec : 0;
 
     const audioDir = path.join(projectDir, "audio");
     const clipsDir = path.join(projectDir, "clips");
     await mkdir(audioDir, { recursive: true });
     await mkdir(clipsDir, { recursive: true });
-    const portrait = await takePortrait();
     // A sibling manifest (dynamic.json next to demo.json) gets its own take
     // files, so two cuts of one project never overwrite each other's take.
     const takeBase = name === manifest.MANIFEST_NAME ? "pip-take" : `pip-take-${path.basename(name, ".json")}`;
     const wantAspect = m.presenter?.takeAspect || "1:1";
+
+    // The avatar cache is keyed on the audio file's bytes, and an mp3 encode
+    // is not byte-stable run to run — so a chunk's audio is only rebuilt when
+    // its inputs (the scene narrations, their padded lengths, the tail)
+    // changed. Otherwise a plain re-run would regenerate (and re-bill) it.
+    // The tail-less form is the pre-chunking recipe, so an old single-chunk
+    // take still reads as fresh.
+    // A chunk's direction: a scene-level presenterPrompt inside the chunk (the
+    // Short's s-close "subtle smirk, no wide grin" note) wins over the
+    // manifest-level one, and it enters the recipe so changing the note
+    // regenerates just that chunk. Chunks without one keep the old recipe.
+    const promptFor = (rs) => rs.find((r) => r.scene.presenterPrompt)?.scene.presenterPrompt || m.presenter?.presenterPrompt || null;
+    const recipeFor = async (rs, tailSec) => {
+      const scenes = await Promise.all(rs.map(async (r) => ({
+        id: r.scene.id, d: r.durationSec,
+        audio: r.scene.audio ? await sha256File(manifest.resolveIn(projectDir, r.scene.audio)) : null,
+      })));
+      const scenePrompt = rs.find((r) => r.scene.presenterPrompt)?.scene.presenterPrompt;
+      if (tailSec > 0) return JSON.stringify(scenePrompt ? { scenes, tail: +tailSec.toFixed(3), prompt: scenePrompt } : { scenes, tail: +tailSec.toFixed(3) });
+      return JSON.stringify(scenes);
+    };
+    const isFresh = async (audioAbs, recipe) =>
+      existsSync(audioAbs) && existsSync(`${audioAbs}.recipe.json`) && (await readFile(`${audioAbs}.recipe.json`, "utf8")) === recipe;
+
+    // An existing take whose every chunk is still fresh (its scenes, their
+    // audio and lengths unchanged, its clip on disk) is the take — even when
+    // it was cut under another chunking rule. Re-cutting it would re-bill.
+    const existing = m.presenter?.pipTake?.segments || [];
+    if (existing.length && !rechunk) {
+      const byId = new Map(ranges.map((r) => [r.scene.id, r]));
+      let ok = existing.flatMap((sg) => sg.scenes || []).join("|") === ranges.map((r) => r.scene.id).join("|");
+      for (const sg of existing) {
+        if (!ok) break;
+        const rs = (sg.scenes || []).map((id) => byId.get(id));
+        const audioAbs = sg.audio ? manifest.resolveIn(projectDir, sg.audio) : null;
+        const videoAbs = sg.video ? manifest.resolveIn(projectDir, sg.video) : null;
+        ok = rs.length && rs.every(Boolean) && audioAbs && videoAbs && existsSync(videoAbs) &&
+          Math.abs(rs[0].fromSec - (sg.fromSec || 0)) < 0.01 &&
+          (await isFresh(audioAbs, await recipeFor(rs, sg.overlapSec || 0)));
+      }
+      if (ok) {
+        info(`  take: up to date (${existing.length} chunk(s), nothing changed) — --rechunk re-cuts it under the current rule`);
+        return report(null, { ok: true, engine, mode, cached: true, take: m.presenter.pipTake });
+      }
+    }
+
+    if (chunks.length > 1) {
+      info(`  take: ${fmtDuration(cursor)} of narration in ${chunks.length} chunk(s) at scene boundaries — each seam is a ${overlapSec}s cross-dissolve; a re-voiced scene only regenerates its own chunk`);
+    }
+    const portrait = dryRun ? null : await takePortrait();
+    const spec = engineSpec;
     const segments = [];
+    let billSec = 0;
     for (const [ci, chunk] of chunks.entries()) {
+      if (only && !chunk.ranges.some((r) => r.scene.id === only)) continue;
       // Each scene's narration padded (or trimmed) to exactly its scene duration,
-      // so the take stays in phase with the picture at every cut.
+      // so the take stays in phase with the picture at every cut; the chunk's
+      // last scene gets the silent tail on top.
       const inputs = [];
       const filters = [];
       chunk.ranges.forEach((r, i) => {
         const src = r.scene.audio ? manifest.resolveIn(projectDir, r.scene.audio) : null;
+        const len = (r.durationSec + (i === chunk.ranges.length - 1 ? chunk.tailSec : 0)).toFixed(3);
         if (src) {
           inputs.push("-i", src);
-          filters.push(`[${inputs.length / 2 - 1}:a]aresample=44100,apad,atrim=0:${r.durationSec.toFixed(3)},asetpts=N/SR/TB[a${i}]`);
+          filters.push(`[${inputs.length / 2 - 1}:a]aresample=44100,apad,atrim=0:${len},asetpts=N/SR/TB[a${i}]`);
         } else {
-          filters.push(`anullsrc=r=44100:cl=mono,atrim=0:${r.durationSec.toFixed(3)},asetpts=N/SR/TB[a${i}]`);
+          filters.push(`anullsrc=r=44100:cl=mono,atrim=0:${len},asetpts=N/SR/TB[a${i}]`);
         }
       });
       const concat = chunk.ranges.map((_, i) => `[a${i}]`).join("") + `concat=n=${chunk.ranges.length}:v=0:a=1[out]`;
-      const suffix = chunks.length > 1 ? `-${ci + 1}` : "";
+      // Chunks are named after their first scene, so the files (and the cache
+      // hits behind them) survive a scene being added or re-voiced elsewhere.
+      const suffix = chunks.length > 1 ? `-${chunk.ranges[0].scene.id}` : "";
       const audioAbs = path.join(audioDir, `${takeBase}${suffix}.mp3`);
-      // The avatar cache is keyed on the audio file's bytes, and an mp3 encode
-      // is not byte-stable run to run — so only rebuild the take audio when
-      // its inputs (the scene narrations and their padded lengths) changed.
-      // Otherwise a plain re-run would regenerate (and re-bill) the take.
-      const recipe = JSON.stringify(await Promise.all(chunk.ranges.map(async (r) => ({
-        id: r.scene.id, d: r.durationSec,
-        audio: r.scene.audio ? await sha256File(manifest.resolveIn(projectDir, r.scene.audio)) : null,
-      }))));
-      const recipeAbs = `${audioAbs}.recipe.json`;
-      const fresh = existsSync(audioAbs) && existsSync(recipeAbs) && (await readFile(recipeAbs, "utf8")) === recipe;
-      if (!fresh) {
+      const recipe = await recipeFor(chunk.ranges, chunk.tailSec);
+      const fresh = await isFresh(audioAbs, recipe);
+      // A dry run never touches the audio or its recipe: writing them would
+      // make the freshness guard above call the OLD clip up to date next run.
+      if (!fresh && !dryRun) {
         await ffmpeg([...inputs, "-filter_complex", [...filters, concat].join(";"), "-map", "[out]", "-ac", "1", "-b:a", "128k", audioAbs]);
-        await writeFile(recipeAbs, recipe);
+        await writeFile(`${audioAbs}.recipe.json`, recipe);
       }
 
-      const videoAbs = path.join(clipsDir, `${takeBase}${suffix}.mp4`);
-      info(`  take${suffix}: animating ${fmtDuration(chunk.durationSec)} corner bubble (${engine}, scenes ${chunk.ranges[0].scene.id} → ${chunk.ranges[chunk.ranges.length - 1].scene.id})…`);
+      const videoAbs = only
+        ? path.join(clipsDir, `take-test-${engine}-${chunk.ranges[0].scene.id}.mp4`)
+        : path.join(clipsDir, `${takeBase}${suffix}.mp4`);
+      const label = `${chunk.ranges[0].scene.id}${chunk.ranges.length > 1 ? ` → ${chunk.ranges[chunk.ranges.length - 1].scene.id}` : ""}`;
+      if (dryRun) {
+        // What a real run would bill: a cache hit on the portrait + this exact
+        // audio is free, anything else is avatar-seconds.
+        const portraitFile = m.presenter?.characterImage ? manifest.resolveIn(projectDir, m.presenter.characterImage) : null;
+        const hit = fresh && portraitFile && existsSync(portraitFile)
+          ? await cache.lookup(projectDir, await cache.key({
+              kind: "presenter", model: spec?.endpoint, params: { engine, prompt: promptFor(chunk.ranges) },
+              files: [portraitFile, audioAbs],
+            }))
+          : null;
+        if (!hit) billSec += chunk.durationSec + chunk.tailSec;
+        info(`  take${suffix}: ${fmtDuration(chunk.durationSec + chunk.tailSec)} (${label}) — ${hit ? "cached" : "would generate"}`);
+        segments.push({ scenes: chunk.ranges.map((x) => x.scene.id), fromSec: +chunk.fromSec.toFixed(3), durationSec: +chunk.durationSec.toFixed(3), overlapSec: chunk.tailSec, cached: !!hit });
+        continue;
+      }
+      info(`  take${suffix}: animating ${fmtDuration(chunk.durationSec + chunk.tailSec)} (${engine}, ${label})…`);
       let r;
       try {
         r = await animate({
           projectDir, imageFile: portrait, audioFile: audioAbs, outFile: videoAbs, engine,
-          prompt: m.presenter?.presenterPrompt || null, force,
+          prompt: promptFor(chunk.ranges), force, aspect: wantAspect,
         });
       } catch (e) {
         if (!isContentRestrictionError(e) && chunk.durationSec > 60 && !args["take-max-sec"]) {
@@ -437,8 +576,8 @@ await main(async () => {
       }
       const meta = await probe(r.path).catch(() => null);
       info(`    ${r.cached ? "cached" : "generated"} ${fmtDuration(meta?.duration)} -> ${manifest.relativeIn(projectDir, r.path)}`);
-      if (meta?.duration && meta.duration + 0.05 < chunk.durationSec) {
-        warn(`take${suffix} came back ${meta.duration.toFixed(1)}s for ${chunk.durationSec.toFixed(1)}s of audio — the bubble will freeze at the tail.`);
+      if (meta?.duration && meta.duration + 0.05 < chunk.durationSec + chunk.tailSec) {
+        warn(`take${suffix} came back ${meta.duration.toFixed(1)}s for ${(chunk.durationSec + chunk.tailSec).toFixed(1)}s of audio — the bubble will freeze at the tail.`);
       }
       // The engine returns whatever resolution it likes at the portrait's aspect.
       // A wide take is shown full-frame by the dynamic style, so say when it
@@ -459,11 +598,22 @@ await main(async () => {
         audio: manifest.relativeIn(projectDir, audioAbs),
         fromSec: +chunk.fromSec.toFixed(3),
         durationSec: +chunk.durationSec.toFixed(3),
+        // Silent tail the next chunk fades in over (0 on the last chunk).
+        overlapSec: chunk.tailSec,
         videoDurationSec: meta?.duration ?? null,
         width: meta?.width ?? null,
         height: meta?.height ?? null,
         scenes: chunk.ranges.map((x) => x.scene.id),
       });
+    }
+    if (only) {
+      info(`  test clip${segments.length ? `: ${segments.map((x) => x.video).join(", ")}` : ""} — manifest untouched (presenter.pipTake unchanged)`);
+      return report(null, { ok: true, test: true, engine, mode, only, segments });
+    }
+    if (dryRun) {
+      const usd = billSec * (engineSpec?.approxUsdPerSecond || 0.056);
+      info(`  dry run: ${segments.filter((x) => !x.cached).length} of ${segments.length} chunk(s) would be generated — ${fmtDuration(billSec)} of avatar (~$${usd.toFixed(2)}); manifest untouched`);
+      return report(null, { ok: true, dryRun: true, engine, mode, chunks: segments, billSec: +billSec.toFixed(2), estimateUsd: +usd.toFixed(2) });
     }
     m.presenter.pipTake = { segments };
     await manifest.save(projectDir, m, { name });
@@ -498,16 +648,48 @@ await main(async () => {
 
     const hasFaceBeats = (scene.beats || []).some((b) => b.shot === "face");
     const isPip = isBottom && !scene.bottom && !hasFaceBeats;
-    info(`  ${scene.id}: animating presenter (${engine}${isBottom ? (hasFaceBeats ? ", face beats" : isPip ? ", corner pip" : ", bottom zone") : ""})…`);
-    const r = await animate({
-      projectDir,
-      imageFile: isBottom ? (hasFaceBeats ? await facePortrait() : await bottomPortrait()) : characterAbs,
-      audioFile: manifest.resolveIn(projectDir, scene.audio),
-      outFile: videoAbs,
-      engine,
-      prompt: scene.presenterPrompt || null,
-      force,
-    });
+    const imageFile = isBottom ? (hasFaceBeats ? await facePortrait() : await bottomPortrait()) : characterAbs;
+    const prompt = scene.presenterPrompt || null;
+    const narrationAbs = manifest.resolveIn(projectDir, scene.audio);
+
+    /**
+     * The clip runs for the whole scene, which is the line plus the breath
+     * (pacing.breathSec) before the next cut. An avatar animated to the bare
+     * line is exactly as long as the line, so the speaker froze on the last
+     * frame through the breath and then jumped into the next take — a visible
+     * stutter at every seam. Animate to the narration padded with silence to
+     * the scene length instead, like the continuous take does. A clip an
+     * earlier run made from the bare line is kept when it already covers the
+     * scene (the engine quantises upward, so most do) — only if it was filed
+     * under these exact inputs, so a re-voiced line still regenerates.
+     */
+    let audioFile = narrationAbs;
+    let reuse = null;
+    const padTo = Number(scene.durationSec) || 0;
+    const narrSec = (await probe(narrationAbs).catch(() => null))?.duration || 0;
+    if (padTo > narrSec + 0.05) {
+      const legacy = force ? null : await cachedAnimation({ projectDir, imageFile, audioFile: narrationAbs, engine, prompt });
+      const legacySec = legacy ? (await probe(legacy).catch(() => null))?.duration || 0 : 0;
+      if (legacy && legacySec >= padTo - 0.1) {
+        reuse = legacy;
+      } else {
+        const paddedAbs = path.join(projectDir, "audio", `${scene.id}.presenter.mp3`);
+        const recipe = JSON.stringify({ audio: await sha256File(narrationAbs), d: +padTo.toFixed(3) });
+        const fresh = existsSync(paddedAbs) && existsSync(`${paddedAbs}.recipe.json`) &&
+          (await readFile(`${paddedAbs}.recipe.json`, "utf8")) === recipe;
+        if (!fresh) {
+          await mkdir(path.dirname(paddedAbs), { recursive: true });
+          await ffmpeg(["-y", "-i", narrationAbs, "-af", `aresample=44100,apad,atrim=0:${padTo.toFixed(3)},asetpts=N/SR/TB`, "-ac", "1", "-b:a", "128k", paddedAbs]);
+          await writeFile(`${paddedAbs}.recipe.json`, recipe);
+        }
+        audioFile = paddedAbs;
+      }
+    }
+
+    info(`  ${scene.id}: animating presenter (${engine}${isBottom ? (hasFaceBeats ? ", face beats" : isPip ? ", corner pip" : ", bottom zone") : ""}${audioFile !== narrationAbs ? `, padded to ${fmtDuration(padTo)}` : ""})…`);
+    const r = reuse
+      ? { path: reuse, cached: true }
+      : await animate({ projectDir, imageFile, audioFile, outFile: videoAbs, engine, prompt, force });
 
     const meta = await probe(r.path).catch(() => null);
     if (isBottom) {

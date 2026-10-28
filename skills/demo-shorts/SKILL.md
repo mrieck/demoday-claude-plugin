@@ -183,7 +183,7 @@ like a creator's "text over the first frame" cover, not a title slide.
   "hook": "Claude just killed video editors.",  // required, ≤60 chars
   "kicker": "HERE'S HOW",                        // optional eyebrow inside the band
   "accent": "#14B8A6",                           // defaults to brand.colors.primary
-  "portrait": "assets/cover-mark.png",           // optional small circle at the band's right
+  "portrait": "assets/cover-mark.png",           // optional small circle at the band's right (dropped automatically when the presenter is already on frame 0)
   "top": 0.22, "height": 0.24,                   // fractions of frame height (defaults)
   "holdSec": 0.5, "outSec": 0.4, "exit": "wipe-up"
 }
@@ -227,7 +227,10 @@ Writing it:
    Same rotation idea as the presenter wardrobe.
 3. **`portrait`** keeps the card recognisably the presenter's without making
    the face the whole cover — a `characters/<name>/` portrait, copied into
-   the project's `assets/`. Skip it on flashcard/glide (no-face styles).
+   the project's `assets/`. Skip it on flashcard/glide (no-face styles), and
+   it is dropped by build-props when the presenter is already on frame 0
+   (an anchored split, a `face` opening beat, a corner bubble) — the band
+   should not show the face twice.
 4. **Preview before rendering:**
 
    ```bash

@@ -6,8 +6,8 @@ description: >-
   presenter, and assemble everything into a finished MP4. Use when the user asks
   to "make a demo video", "record a demo", "create a product video", "show off
   this app", "make a walkthrough video", or runs /create-demo-video. Handles web
-  apps, dashboards, websites, macOS desktop apps, and CLI/terminal programs
-  (including demos of Claude Code plugins).
+  apps, dashboards, websites, macOS desktop apps, browser extensions, and
+  CLI/terminal programs (including demos of Claude Code plugins).
 ---
 
 # Making a demo video
@@ -175,10 +175,26 @@ What the style seeds (all overridable in `demo.json`):
   to its scene length and concatenated, then animated once, and the renderer
   plays that clip straight through underneath the cuts. No pop-in/pop-out at
   every step, no frozen bubble at scene tails, same avatar-seconds as per-scene
-  clips. kling-avatar handled a 73s take in one clip; `--take-max-sec` (default
-  120) chunks longer takes at scene boundaries, and a refused long take
+  clips. The take is cut into **one chunk per scene** (`--take-chunk scene`,
+  the default; a scene under 4s rides with its neighbour), each chunk named
+  after its first scene, so re-voicing one line regenerates only that scene's
+  chunk — not the whole runtime (a one-word hook change on a 44s video used to
+  re-bill the full take). Every chunk but the last ends in a 0.3s silent tail
+  (`--take-overlap`) that the renderer fades the next chunk in over, so the
+  avatar's re-pose at a seam is a short cross-dissolve, not a snap. An
+  existing take whose chunks are all fresh is left alone whatever the rule
+  (`--rechunk` re-cuts it, re-billing once); `--take --dry-run` prints which
+  chunks a run would generate and the avatar-seconds it would bill — use it
+  before any narration edit on a finished video. `--take-chunk none` is the
+  old greedy packing up to `--take-max-sec` (120); a refused long chunk
   automatically retries as 60s chunks. `--take false` gives the old
-  per-scene clips.
+  per-scene clips. `--take --only <sceneId> [--engine <name>]` generates just
+  that scene's chunk as `clips/take-test-<engine>-<scene>.mp4` and leaves the
+  manifest alone — the way to audition another engine on one scene before
+  committing a take. Engines: `kling-avatar` (default), `omnihuman`, and
+  `seedance-2.5` (reference-to-video; tested 2026-09-16 — great motion but it
+  re-performs the narration at its own pace, so the lips drift off the audio
+  track; see the registry note before using it).
 - `zoomToClick = false` manifest-wide — the 1.18× push-in crops the sidebar,
   and in a walkthrough the whole UI is the point. Set it per scene to re-enable.
 - Short by default: **~60–90s**. Avatar-seconds bill for the entire runtime in
@@ -202,8 +218,10 @@ Then follow these rules:
   estimate before generating.
 
 Existing projects keep their scaffolded Remotion app: an older `anchor`/`always`
-project only gains the corner bubble after `render.mjs --sync-template` (which
-overwrites any local Remotion edits — say so first) plus `gen/presenter.mjs --all`.
+project only gains the corner bubble once its `remotion/src` matches the
+template — render.mjs syncs it on its own when the project lacks files the
+template has, or pass `--sync-template` (both overwrite local Remotion edits —
+say so first) — plus `gen/presenter.mjs --all`.
 
 ### The dynamic tutorial recipe (`--style dynamic`)
 
@@ -211,7 +229,7 @@ The engaging cousin of `tutorial`, measured from the best creator tutorials
 (48 shots in 4:28, 2026-09-13): the presenter is still **one continuous
 lip-synced take**, but instead of sitting in a corner it is **re-framed every
 4–6 seconds** — full-frame face, a tall side panel next to the screen, a small
-corner card over it — and every change is a ~0.2s ease-out **move** of the
+corner card over it — and every change is a ~0.3s ease-out **move** of the
 frame with the screen content fading in or out beneath it. The screen is never
 the whole window: each beat zooms 2–3× into the element being talked about.
 Captions are always on: a bottom phrase box whose words appear as spoken, one
@@ -230,8 +248,9 @@ What the style seeds (`plan.mjs --init --style dynamic`):
   generated. The take comes back at the engine's resolution (~1280×720 for
   kling): a full-frame face on 1080p is a 1.5× upscale, which is the reference
   look too.
-- `presenter.frame = { morphMs: 200, pace: "lively", faceFit: "auto" }` —
-  `morphMs` is the move duration (`0` = hard cuts). **`pace` is a direction
+- `presenter.frame = { morphMs: 300, pace: "lively", faceFit: "auto" }` —
+  `morphMs` is the move duration (`0` = hard cuts; the reference tutorial
+  measured ~200 but that reads too fast). **`pace` is a direction
   question — ask it:** `"lively"` is the creator grammar below (a move every
   4–6s, the rules measure it); `"calm"` (`plan.mjs --init --style dynamic
   --pace calm`) is a plain step-by-step for people who find the jumping
@@ -265,8 +284,11 @@ Then write the manifest like this:
 - **Frame 0 is a hook band, not a blank frame.** The style scaffolds
   `cover: { kind: "overlay", hook, kicker, accent?, portrait? }` — the band
   over the real first frame (the face), held 0.5s then slid away. Write the
-  hook (≤ 60 chars, the claim), a short kicker, and point `portrait` at a
-  square still of the presenter (`assets/cover-mark.png`). This is the poster
+  hook (≤ 60 chars, the claim) and a short kicker. `portrait` (a square still
+  of the presenter) is only for a video whose frame 0 has no presenter on it;
+  build-props drops it when the presenter is already on frame 0 (a `face`
+  opening beat, an anchored split, a corner bubble), so the face is not shown
+  twice. This is the poster
   of every README / embedded player, which otherwise shows whatever frame 0
   happens to be. Delete the block to opt out.
 - **Mix ≈ 40% face / 40% panel / 20% card**, 20–28 layout shots at 120s,
@@ -275,7 +297,7 @@ Then write the manifest like this:
 - **`focus`** is `{ x, y, w, h }` as fractions of the capture frame — the box
   around the field/button the narration names, `w` 0.3–0.5 (tighter than 0.3
   is mush). A focus change on the same running clip glides there over 0.4s;
-  a `videoStartSec` jump (or `"cut": "dissolve"`) is a 0.2s zoom-dissolve to
+  a `videoStartSec` jump (or `"cut": "dissolve"`) is a `morphMs`-long zoom-dissolve to
   the new moment. Whole-window beats (no focus) are for when the layout is
   the point; `"framing": "pan" | "cover"` on a beat opts into DemoClip's
   click-following pan instead of the focus box.
@@ -293,10 +315,10 @@ Then write the manifest like this:
   scene only to override; `captions.autoEmphasis: false` turns the auto pick
   off.
 - Generate in this order: TTS → captures → `gen/presenter.mjs --all` (once;
-  the take is chunked at scene boundaries above `--take-max-sec` 120 and the
-  avatar re-poses at a chunk seam — build-props warns unless a layout change
-  sits on that second, so start a scene with a new layout there) → render.
-  The plan gate shows the take as one "continuous take" line (~$0.056/s).
+  one chunk per scene, seams cross-dissolved — a later narration edit re-runs
+  it and only the changed scene's chunk is billed; batch wording changes
+  anyway, and `--dry-run` first) → render. The plan gate shows the take as
+  one "continuous take" line (~$0.056/s).
 
 Renderer pieces, for the assembly guide: `PresenterFrame.jsx` (the moving
 frame), `DynamicScene.jsx` (the content pane + focus/dissolve), `lib/layouts.js`
@@ -368,7 +390,9 @@ back into `demo.json`. Every later step reads those durations.
 ## 5. Rehearse
 
 Start a session with the MCP tools — `demo_open` for web, `demo_open_app` for a
-macOS app, `demo_open_cli` for a terminal program. (No `demo_*` tools in your
+macOS app, `demo_open_cli` for a terminal program, `demo_open_browser` for a
+browser extension (it needs the toolbar and side panel in frame, which a web
+scene never records). (No `demo_*` tools in your
 tool list? `node scripts/stage.mjs <name>` drives the same server from the
 shell — `node scripts/stage.mjs tools` lists them; see the top-level `SKILL.md`.)
 
@@ -381,7 +405,8 @@ shell — `node scripts/stage.mjs tools` lists them; see the top-level `SKILL.md
 While rehearsing, **tell the user what part of the app you are exercising** and
 what you found. That running commentary is half the value of this whole process.
 
-See the **demo-capture** skill for staging, desktop coordinates and permissions.
+See the **demo-capture** skill for staging, desktop coordinates and permissions,
+and for the setup-then-frozen browser profile an extension demo depends on.
 
 ## 6. Perform
 
@@ -395,8 +420,10 @@ node scripts/capture/web-perform.mjs \
   --target-duration 14.0
 ```
 
-Desktop scenes use `mac-perform.mjs --app "<App Name>"` instead. Then record the
-clip and its event log in `demo.json` (`video`, `events`).
+Desktop scenes use `mac-perform.mjs --app "<App Name>"` instead, and browser
+extension scenes use `browser-perform.mjs` (the script carries its own url,
+extension and profile). Then record the clip and its event log in `demo.json`
+(`video`, `events`).
 
 If it warns that the steps overrun the narration, fix it in the script — either
 cut steps or lengthen that line. Do not ignore it; the scene will overrun.

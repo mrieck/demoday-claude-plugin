@@ -7,14 +7,15 @@
  *
  * The Remotion app is COPIED into <project>/remotion rather than run from the
  * plugin, so the user can open it, change a transition, restyle a card, and keep
- * those edits. It is only copied when missing; an existing app is never overwritten.
+ * those edits. It is only copied when missing; an existing app is overwritten only
+ * with --sync-template, or when it lacks files the current template has (stale).
  *
  * `--public-dir` is pointed at the demo project, so staticFile("clips/x.mp4")
  * resolves directly to the files the pipeline produced — no copying media around.
  */
 import path from "node:path";
-import { cp, mkdir, writeFile, readFile } from "node:fs/promises";
-import { existsSync } from "node:fs";
+import { cp, mkdir, writeFile, readFile, readdir } from "node:fs/promises";
+import { existsSync, readFileSync } from "node:fs";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { parseArgs, boolArg } from "../lib/args.mjs";
@@ -38,6 +39,26 @@ function run(cmd, args, cwd) {
     p.on("error", reject);
     p.on("close", (code) => (code === 0 ? resolve() : reject(new Error(`${cmd} exited ${code}`))));
   });
+}
+
+/** Template source files (relative) the project's remotion/src does not have. */
+async function missingTemplateFiles(appDir) {
+  const root = path.join(TEMPLATE, "src");
+  const out = [];
+  for (const rel of await listFiles(root)) {
+    if (rel === "props.json") continue;
+    if (!existsSync(path.join(appDir, "src", rel))) out.push(rel);
+  }
+  return out;
+}
+async function listFiles(dir, base = dir) {
+  const out = [];
+  for (const e of await readdir(dir, { withFileTypes: true })) {
+    const abs = path.join(dir, e.name);
+    if (e.isDirectory()) out.push(...(await listFiles(abs, base)));
+    else out.push(path.relative(base, abs));
+  }
+  return out;
 }
 
 /** Copy the template in and install its dependencies, once. */
@@ -77,6 +98,17 @@ await main(async () => {
   if (boolArg(args["sync-template"], false)) {
     warn("  --sync-template: overwriting the project's remotion/src with the plugin template — local Remotion edits are lost.");
     await cp(path.join(TEMPLATE, "src"), path.join(appDir, "src"), { recursive: true });
+  } else {
+    // A project scaffolded before a style existed has none of that style's
+    // components, and the composition falls back to older layouts without
+    // saying so (a dynamic cut rendered as a corner bubble, 2026-09-16). A
+    // file the template has and the project lacks cannot be a local edit, so
+    // that is safe to detect and the only honest fix is the full sync.
+    const missing = await missingTemplateFiles(appDir);
+    if (missing.length) {
+      warn(`  the project's remotion/src predates the plugin template (missing ${missing.slice(0, 3).join(", ")}${missing.length > 3 ? ` +${missing.length - 3}` : ""}) — syncing it; local Remotion edits are lost.`);
+      await cp(path.join(TEMPLATE, "src"), path.join(appDir, "src"), { recursive: true });
+    }
   }
 
   // Props are rebuilt every time so the render always reflects the manifest.
@@ -144,8 +176,20 @@ await main(async () => {
 
   // SCRIPT.md is what other tools (cross-posting) read to describe the video;
   // regenerate its narration block from the manifest so it never lags the cut.
+  // A sibling manifest (shorts.json, dynamic.json) writes SCRIPT-<name>.md when
+  // SCRIPT.md already describes ANOTHER cut of this project (its Output line
+  // names a different slug), so two cuts never overwrite each other's script.
+  // A project whose only cut is the sibling keeps writing SCRIPT.md.
+  const scriptNameFor = (m) => {
+    if (name === manifest.MANIFEST_NAME) return "SCRIPT.md";
+    const existing = path.join(projectDir, "SCRIPT.md");
+    if (!existsSync(existing)) return "SCRIPT.md";
+    const head = readFileSync(existing, "utf8").slice(0, 4000);
+    const owned = new RegExp("Output: `out/" + m.slug.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\.mp4`").test(head);
+    return owned ? "SCRIPT.md" : `SCRIPT-${path.basename(name, ".json")}.md`;
+  };
   const scriptFile = await manifest.load(projectDir, { name })
-    .then((m) => writeScript(projectDir, m, { rendered: new Date().toLocaleDateString("en-CA") }))
+    .then((m) => writeScript(projectDir, m, { name: scriptNameFor(m), rendered: new Date().toLocaleDateString("en-CA") }))
     .catch((e) => (warn(`SCRIPT.md not updated: ${e.message}`), null));
 
   report(

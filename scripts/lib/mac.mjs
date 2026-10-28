@@ -164,6 +164,17 @@ export async function activate(appName, { settleMs = 400 } = {}) {
   await new Promise((r) => setTimeout(r, settleMs));
 }
 
+/**
+ * How many running processes carry this name. The window helpers above address
+ * "window 1 of process <name>", so two processes with one name is ambiguous.
+ */
+export async function processCount(appName) {
+  const raw = await osa(
+    `tell application "System Events" to count (every application process whose name is ${JSON.stringify(appName)})`
+  );
+  return Number(raw) || 0;
+}
+
 export async function frontmostApp() {
   return osa('tell application "System Events" to return name of first application process whose frontmost is true');
 }

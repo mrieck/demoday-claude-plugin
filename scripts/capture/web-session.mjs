@@ -265,6 +265,44 @@ export class WebSession {
         break;
       }
 
+      case "upload": {
+        // A file input: Playwright sets the files directly (no native chooser). The
+        // path is absolute or relative to the process cwd. The cursor still travels
+        // to the input so the viewer sees where the file went — or, since most
+        // file inputs are `hidden` behind a styled label or button, to the
+        // element that fronts it: step.at (a selector ladder) or the label[for]
+        // of the input. A hidden input is resolved as attached, not visible.
+        let locator, box = null, selector;
+        const hiddenInput = await (async () => {
+          for (const sel of step.selectors) {
+            const l = this.page.locator(sel).first();
+            const attached = await l.waitFor({ state: "attached", timeout: 8000 / step.selectors.length }).then(() => true).catch(() => false);
+            if (attached) return { sel, l, visible: await l.isVisible().catch(() => false) };
+          }
+          return null;
+        })();
+        if (!hiddenInput || hiddenInput.visible) {
+          ({ locator, box, selector } = await this.resolve(step.selectors));
+        } else {
+          ({ sel: selector, l: locator } = hiddenInput);
+          const front = step.at?.length ? await this.resolve(step.at).catch(() => null) : null;
+          if (front) box = front.box;
+          else {
+            const id = await locator.getAttribute("id");
+            const label = id ? this.page.locator(`label[for="${id}"]`).first() : null;
+            if (label && (await label.isVisible().catch(() => false))) box = await label.boundingBox();
+          }
+        }
+        if (box) {
+          await this.glideTo(Math.round(box.x + box.width / 2), Math.round(box.y + box.height / 2));
+          await this.safeEval(() => window.__demodayCursor?.click());
+        }
+        const files = (Array.isArray(step.file) ? step.file : [step.file]).map((f) => path.resolve(f));
+        await locator.setInputFiles(files);
+        this.logEvent("upload", { selector, files, label: step.label || "upload" });
+        break;
+      }
+
       case "wait":
       case "dwell": {
         if (step.selector && step.type === "wait") {

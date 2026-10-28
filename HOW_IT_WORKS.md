@@ -33,6 +33,10 @@ starting underneath the last one.
 - **CLI / terminal** — a staged Terminal.app window running the real program
   (including a live `claude` session for demoing Claude Code plugins), recorded
   at natural speed and retimed to the narration.
+- **Browser window** — a dedicated Chrome for Testing with an unpacked
+  extension loaded, recorded with its toolbar and side panel in frame and driven
+  by screenshot and coordinates like a desktop app. Each rehearsal and take runs
+  on a throwaway copy of a profile prepared once in a setup session.
 - **iOS simulator** — declared in the manifest schema but not implemented yet.
 
 ## Project state: `demo.json` and the cache

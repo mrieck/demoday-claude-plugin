@@ -99,6 +99,7 @@ scene.
 - 💻 **Films almost anything on a Mac** — web apps, native macOS apps, and
   CLI/terminal programs (yes, it can demo a Claude Code plugin from inside a
   live `claude` session).
+- 🧩 **Browser extensions too** — a dedicated Chrome window with your unpacked extension loaded, toolbar and side panel in frame.
 - 🔁 **Cheap to iterate** — change one line of narration and only that line is
   regenerated. A cost estimate is shown *before* anything is spent.
 

@@ -32,6 +32,14 @@ import { fileURLToPath } from "node:url";
 /** Keychain service name; each secret is an "account" under it. */
 export const KEYCHAIN_SERVICE = "demoday";
 
+/**
+ * Shared Keychain service for secrets common to all productive-mark plugins
+ * (FAL_API_KEY, ELEVENLABS_API_KEY, ...). Checked after this plugin's own
+ * service so one key can be stored once instead of once per plugin:
+ *   security add-generic-password -U -s productive-mark -a FAL_API_KEY -w
+ */
+export const SHARED_KEYCHAIN_SERVICE = "productive-mark";
+
 /** Secrets we know how to resolve. Anything else must come from the environment. */
 export const KNOWN_SECRETS = ["FAL_API_KEY", "BRAVE_API_KEY", "ELEVENLABS_API_KEY"];
 
@@ -132,6 +140,12 @@ export function loadSecrets({ force = false } = {}) {
     if (value) {
       process.env[name] = value;
       origins.set(name, "keychain");
+      continue;
+    }
+    const shared = fromKeychain(name, { service: SHARED_KEYCHAIN_SERVICE });
+    if (shared) {
+      process.env[name] = shared;
+      origins.set(name, "keychain (shared productive-mark service)");
     }
   }
 

@@ -456,7 +456,10 @@ await main(async () => {
   // hidden — with the frame morphing between them, focus zooms (one glide on
   // the same clip), a videoStartSec zoom-dissolve, a beat inheriting its
   // layout, build-up captions with an authored emphasis word, and a face close.
-  await fakeClip(path.join(dir, "clips", "pip-take-dynamic.mp4"), { seconds: 12, w: 1280, h: 720, pattern: "smptehdbars" });
+  // Two chunks (one per scene, as presenter.mjs cuts them): the first carries
+  // a 0.3s silent tail the second fades in over — the seam cross-dissolve.
+  await fakeClip(path.join(dir, "clips", "pip-take-dynamic-d-hook.mp4"), { seconds: 7, w: 1280, h: 720, pattern: "smptehdbars" });
+  await fakeClip(path.join(dir, "clips", "pip-take-dynamic-d-step.mp4"), { seconds: 6, w: 1280, h: 720, pattern: "testsrc2" });
   const dyn = manifest.blankManifest({ slug: "selftest-dynamic", name: "Selftest Dynamic" });
   dyn.format = { width: 960, height: 540, fps: 30 };
   dyn.style = "dynamic";
@@ -465,10 +468,16 @@ await main(async () => {
   dyn.presenter.takeAspect = "16:9";
   dyn.presenter.frame = { morphMs: 200 };
   dyn.presenter.pipTake = {
-    segments: [{
-      video: "clips/pip-take-dynamic.mp4", audio: "audio/demo.mp3",
-      fromSec: 0, durationSec: 11, videoDurationSec: 12, width: 1280, height: 720, scenes: ["d-hook", "d-step"],
-    }],
+    segments: [
+      {
+        video: "clips/pip-take-dynamic-d-hook.mp4", audio: "audio/demo.mp3",
+        fromSec: 0, durationSec: 6, overlapSec: 0.3, videoDurationSec: 7, width: 1280, height: 720, scenes: ["d-hook"],
+      },
+      {
+        video: "clips/pip-take-dynamic-d-step.mp4", audio: "audio/cli.mp3",
+        fromSec: 6, durationSec: 5, overlapSec: 0, videoDurationSec: 6, width: 1280, height: 720, scenes: ["d-step"],
+      },
+    ],
   };
   dyn.captions = { enabled: true, style: "buildup" };
   dyn.zoomToClick = false;
